@@ -1,0 +1,57 @@
+---
+- name: Verify DHCP filtering without exposing a service to the LAN
+  hosts: provisioning
+  become: true
+  gather_facts: false
+  vars_files:
+    - ../../inventory/homelab.example.yaml
+    - roles/cp03_netboot/defaults/main.yaml
+  tasks:
+    - name: Create an isolated test workspace
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: homelab-netboot-test-
+      register: proxy_test_workspace
+
+    - name: Run real dnsmasq packet tests in a fresh Linux network namespace
+      block:
+        - name: Copy the dependency-free packet test
+          ansible.builtin.copy:
+            src: ../../tests/proxy_dhcp_isolated.py
+            dest: '{{ proxy_test_workspace.path }}/test.py'
+            owner: root
+            group: root
+            mode: '0600'
+
+        - name: Render the real template for the isolated virtual interface
+          ansible.builtin.template:
+            src: roles/cp03_netboot/templates/dnsmasq.conf.j2
+            dest: '{{ proxy_test_workspace.path }}/dnsmasq.conf'
+            owner: root
+            group: root
+            mode: '0600'
+            validate: '/usr/sbin/dnsmasq --test --conf-file=%s'
+          vars:
+            cp03_netboot_provisioning_interface: nb-server
+            cp03_netboot_provisioning_address: 192.0.2.2
+            cp03_netboot_lease_file: '{{ proxy_test_workspace.path }}/dnsmasq.leases'
+
+        - name: Execute only in an isolated network namespace
+          ansible.builtin.command:
+            argv:
+              - unshare
+              - --net
+              - python3
+              - '{{ proxy_test_workspace.path }}/test.py'
+              - '{{ proxy_test_workspace.path }}/dnsmasq.conf'
+          register: proxy_test_result
+          changed_when: false
+
+        - name: Report protocol test results
+          ansible.builtin.debug:
+            var: proxy_test_result.stdout_lines
+      always:
+        - name: Remove the temporary test workspace
+          ansible.builtin.file:
+            path: '{{ proxy_test_workspace.path }}'
+            state: absent

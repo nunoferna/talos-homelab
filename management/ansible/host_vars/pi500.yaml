@@ -1,0 +1,7 @@
+---
+# Package versions verified against the Pi's Raspbian Bookworm armhf repository.
+# A 64-bit kernel does not imply 64-bit userspace. No OS migration in this phase.
+cp03_netboot_dnsmasq_package_version: 2.90-4~deb12u1
+cp03_netboot_sbsigntool_package_version: 0.9.4-3.1
+cp03_netboot_binutils_package_version: 2.40-2+rpi2
+ansible_python_interpreter: /usr/bin/python3

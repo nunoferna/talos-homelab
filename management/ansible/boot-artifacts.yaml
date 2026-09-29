@@ -1,0 +1,10 @@
+---
+boot_artifacts:
+  uki_url: >-
+    https://pxe.factory.talos.dev/image/376567988ad370138ad8b2698212367b8edcb69b5fd68c80be1f2ec7d603b4ba/v1.14.1/metal-amd64-secureboot-uki.efi
+  # Downloaded over HTTPS and inspected on 2026-09-27. The role must ALSO verify
+  # the Authenticode signature with sbverify before activation is considered.
+  uki_sha256: 03e813b4d6b80ea61c9e96a94aee867a0c4b66155ae2740febfd15cb359f7b29
+  certificate_url: https://factory.talos.dev/secureboot/signing-cert.pem
+  certificate_sha256: d78ad875f3c920b17c73b72f6e6924b1156d0d12602a1e456bc63fe579fa35f9
+  certificate_fingerprint_sha256: 1AE5D7C8AC1032EAF0D2C1A2E6A952517342E8DB6B5354D32791A9C960A9472E

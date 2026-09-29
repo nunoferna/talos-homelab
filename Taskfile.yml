@@ -1,0 +1,52 @@
+version: '3'
+
+tasks:
+  default:
+    cmds:
+      - task --list
+
+  pi:discover:
+    desc: Read the Pi's interfaces, listeners, packages and storage
+    dir: management/ansible
+    cmds:
+      - ansible-playbook discover.yaml
+
+  pi:stage:
+    desc: Stage verified artifacts and a STOPPED PXE service using reviewed local host vars
+    dir: management/ansible
+    preconditions:
+      - test -f ../../.local/pi.yaml
+      - test -f ../../.local/talos-homelab-gitops/inventory/homelab.yaml
+    cmds:
+      - >-
+        ansible-playbook stage.yaml
+        --extra-vars @../../.local/pi.yaml
+        --extra-vars @../../.local/talos-homelab-gitops/inventory/homelab.yaml
+
+  pi:artifacts:
+    desc: Download and verify public boot artifacts without starting any services
+    dir: management/ansible
+    cmds:
+      - ansible-playbook prepare-artifacts.yaml
+
+  pi:stop:
+    desc: Stop the dedicated temporary PXE service
+    dir: management/ansible
+    cmds:
+      - ansible-playbook stop.yaml
+
+  pi:test-proxy:
+    desc: Test DHCP allowlisting with real packets inside an isolated Linux namespace
+    dir: management/ansible
+    cmds:
+      - ansible-playbook test-proxy.yaml
+
+  validate:
+    desc: Validate YAML and Ansible syntax without contacting hosts
+    cmds:
+      - yamllint .
+      - for: [discover, prepare-artifacts, stage, activate, stop, test-proxy]
+        cmd: cd management/ansible && ansible-playbook --syntax-check {{.ITEM}}.yaml
+
+# Activation intentionally uses the explicit reviewed command in the runbook.
+# No install, reset, bootstrap, cluster or firmware commands exist in this phase.

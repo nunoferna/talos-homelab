@@ -1,0 +1,84 @@
+---
+- name: Require reviewed host details and immutable boot artifact
+  ansible.builtin.assert:
+    that:
+      - cp03_netboot_provisioning_interface is match('^[a-zA-Z0-9_.:-]+$')
+      - cp03_netboot_provisioning_address is match('^([0-9]{1,3}\.){3}[0-9]{1,3}$')
+      - cp03_netboot_provisioning_address.split('.') | map('int') | min >= 0
+      - cp03_netboot_provisioning_address.split('.') | map('int') | max <= 255
+      - >-
+        cp03_netboot_provisioning_address not in
+        ([homelab.network.kubernetes_vip, homelab.network.gateway]
+        + (homelab.nodes | dict2items | map(attribute='value.intended_ip') | list))
+      - cp03_netboot_dnsmasq_package_version | length > 0
+      - boot_artifacts.uki_sha256 is match('^[a-f0-9]{64}$')
+      - cp03_netboot_target_node in ['cp01', 'cp02', 'cp03']
+      - homelab.nodes[cp03_netboot_target_node].mac is match('^([0-9a-f]{2}:){5}[0-9a-f]{2}$')
+    fail_msg: Review Pi discovery and pin the UKI checksum and Debian dnsmasq-base version before staging.
+
+- name: Confirm the selected IPv4 address exists on the selected interface
+  ansible.builtin.command:
+    argv: [ip, -j, -4, address, show, dev, '{{ cp03_netboot_provisioning_interface }}']
+  register: cp03_netboot_selected_interface
+  changed_when: false
+  check_mode: false
+
+- name: Reject an address not present on the selected interface
+  ansible.builtin.assert:
+    that:
+      - >-
+        cp03_netboot_provisioning_address in
+        ((cp03_netboot_selected_interface.stdout | from_json)
+        | map(attribute='addr_info') | flatten | map(attribute='local') | list)
+
+- name: Inspect any existing qualification service
+  ansible.builtin.command:
+    argv: [systemctl, is-active, homelab-netboot.service]
+  register: cp03_netboot_existing_service
+  changed_when: false
+  failed_when: cp03_netboot_existing_service.rc not in [0, 3, 4]
+  check_mode: false
+
+- name: Refuse to change a running boot service
+  ansible.builtin.assert:
+    that: cp03_netboot_existing_service.stdout | trim != 'active'
+    fail_msg: Stop the qualification service before changing its configuration.
+
+- name: Check DHCP, PXE and TFTP listeners before installing anything
+  ansible.builtin.command:
+    argv: [ss, -H, -lun, 'sport = :67 or sport = :69 or sport = :4011']
+  register: cp03_netboot_existing_listeners
+  changed_when: false
+  check_mode: false
+
+- name: Refuse to share existing provisioning ports
+  ansible.builtin.assert:
+    that: cp03_netboot_existing_listeners.stdout | trim | length == 0
+    fail_msg: Existing DHCP/PXE/TFTP listeners require review. No services will be stopped automatically.
+
+- name: Prepare and verify boot artifacts
+  ansible.builtin.import_tasks: artifacts.yaml
+
+- name: Stage standalone proxy configuration with syntax validation
+  ansible.builtin.template:
+    src: dnsmasq.conf.j2
+    dest: '{{ cp03_netboot_boot_config_dir }}/dnsmasq.conf'
+    owner: root
+    group: root
+    mode: '0644'
+    validate: '/usr/sbin/dnsmasq --test --conf-file=%s'
+
+- name: Stage systemd unit without starting it
+  ansible.builtin.template:
+    src: homelab-netboot.service.j2
+    dest: /etc/systemd/system/homelab-netboot.service
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Keep qualification service stopped and disabled across reboot
+  ansible.builtin.systemd_service:
+    name: homelab-netboot.service
+    daemon_reload: true
+    enabled: false
+    state: stopped

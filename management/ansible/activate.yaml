@@ -1,0 +1,93 @@
+---
+- name: Open an explicitly approved 15 minute PXE qualification window
+  hosts: provisioning
+  gather_facts: false
+  become: true
+  vars_files:
+    - boot-artifacts.yaml
+    - roles/cp03_netboot/defaults/main.yaml
+  tasks:
+    - name: Require LAN activation approval and firmware/artifact review
+      ansible.builtin.assert:
+        that:
+          - cp03_netboot_target_node in ['cp01', 'cp02', 'cp03']
+          - approved_target_node | default('') == cp03_netboot_target_node
+          - lan_activation_approved | default(false) | bool
+          - firmware_and_artifact_reviewed | default(false) | bool
+        fail_msg: >-
+          Activation needs explicit operator approval after reviewing the staged
+          configuration, UKI signature/command line, firmware trust and Pi listeners.
+          Set approved_target_node to the single node explicitly approved for this window.
+
+    - name: Require the reviewed interface and address
+      ansible.builtin.assert:
+        that:
+          - cp03_netboot_provisioning_interface | length > 0
+          - cp03_netboot_provisioning_address | length > 0
+        fail_msg: Supply the same reviewed local variables used for staging.
+
+    - name: Read current interface addresses
+      ansible.builtin.command:
+        argv: [ip, -j, -4, address, show, dev, '{{ cp03_netboot_provisioning_interface }}']
+      register: activation_interface
+      changed_when: false
+
+    - name: Reject a changed DHCP lease
+      ansible.builtin.assert:
+        that:
+          - >-
+            cp03_netboot_provisioning_address in
+            ((activation_interface.stdout | from_json)
+            | map(attribute='addr_info') | flatten | map(attribute='local') | list)
+
+    - name: Read the staged configuration
+      ansible.builtin.slurp:
+        src: /etc/homelab-netboot/dnsmasq.conf
+      register: activation_config
+
+    - name: Require the staged configuration to match the reviewed template
+      ansible.builtin.assert:
+        that:
+          - >-
+            (activation_config.content | b64decode) ==
+            lookup('ansible.builtin.template', 'roles/cp03_netboot/templates/dnsmasq.conf.j2')
+
+    - name: Recheck that provisioning ports are unused
+      ansible.builtin.command:
+        argv: [ss, -H, -lun, 'sport = :67 or sport = :69 or sport = :4011']
+      register: activation_listeners
+      changed_when: false
+
+    - name: Refuse conflicting or already active provisioning services
+      ansible.builtin.assert:
+        that: activation_listeners.stdout | trim | length == 0
+
+    - name: Recheck the pinned boot artifact digest
+      ansible.builtin.stat:
+        path: '{{ cp03_netboot_boot_root }}/{{ cp03_netboot_boot_filename }}'
+        checksum_algorithm: sha256
+      register: activation_artifact
+
+    - name: Refuse a missing or changed artifact
+      ansible.builtin.assert:
+        that:
+          - activation_artifact.stat.checksum | default('') == boot_artifacts.uki_sha256
+
+    - name: Validate the staged configuration
+      ansible.builtin.command:
+        argv: [/usr/sbin/dnsmasq, --test, --conf-file=/etc/homelab-netboot/dnsmasq.conf]
+      changed_when: false
+
+    - name: Start the temporary service without enabling it on boot
+      ansible.builtin.systemd_service:
+        name: homelab-netboot.service
+        state: started
+
+    - name: Allow startup errors to reach systemd
+      ansible.builtin.pause:
+        seconds: 2
+
+    - name: Confirm the service survived startup
+      ansible.builtin.command:
+        argv: [systemctl, is-active, homelab-netboot.service]
+      changed_when: false

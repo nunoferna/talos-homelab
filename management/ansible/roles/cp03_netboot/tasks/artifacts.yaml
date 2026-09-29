@@ -1,0 +1,71 @@
+---
+- name: Require immutable artifacts and exact verification tool versions
+  ansible.builtin.assert:
+    that:
+      - boot_artifacts.uki_sha256 is match('^[a-f0-9]{64}$')
+      - cp03_netboot_dnsmasq_package_version | length > 0
+      - cp03_netboot_sbsigntool_package_version | length > 0
+      - cp03_netboot_binutils_package_version | length > 0
+
+- name: Install binary and signature inspection tools without service auto-start
+  ansible.builtin.apt:
+    name:
+      - 'dnsmasq-base={{ cp03_netboot_dnsmasq_package_version }}'
+      - 'sbsigntool={{ cp03_netboot_sbsigntool_package_version }}'
+      - 'binutils-multiarch={{ cp03_netboot_binutils_package_version }}'
+    state: present
+    update_cache: false
+    policy_rc_d: 101
+
+- name: Create dedicated configuration and public artifact directories
+  ansible.builtin.file:
+    path: '{{ item }}'
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop:
+    - '{{ cp03_netboot_boot_root }}'
+    - '{{ cp03_netboot_boot_config_dir }}'
+
+- name: Download pinned public signing certificate
+  ansible.builtin.get_url:
+    url: '{{ boot_artifacts.certificate_url }}'
+    dest: '{{ cp03_netboot_boot_config_dir }}/signing-cert.pem'
+    checksum: 'sha256:{{ boot_artifacts.certificate_sha256 }}'
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Download the exact approved UKI
+  ansible.builtin.get_url:
+    url: '{{ boot_artifacts.uki_url }}'
+    dest: '{{ cp03_netboot_boot_root }}/{{ cp03_netboot_boot_filename }}'
+    checksum: 'sha256:{{ boot_artifacts.uki_sha256 }}'
+    # tftp-secure requires the file owner to match dnsmasq's dropped UID.
+    owner: nobody
+    group: nogroup
+    mode: '0444'
+    timeout: 120
+
+- name: Verify the UKI signature against the pinned Sidero public certificate
+  ansible.builtin.command:
+    argv:
+      - sbverify
+      - --cert
+      - '{{ cp03_netboot_boot_config_dir }}/signing-cert.pem'
+      - '{{ cp03_netboot_boot_root }}/{{ cp03_netboot_boot_filename }}'
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Inspect the signed embedded command line
+  ansible.builtin.command:
+    argv: [objdump, -s, -j, .cmdline, '{{ cp03_netboot_boot_root }}/{{ cp03_netboot_boot_filename }}']
+  register: cp03_netboot_uki_command_line
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Show embedded command line for pre-activation review
+  ansible.builtin.debug:
+    var: cp03_netboot_uki_command_line.stdout_lines
+  when: not ansible_check_mode

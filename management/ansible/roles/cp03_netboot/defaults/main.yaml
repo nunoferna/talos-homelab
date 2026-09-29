@@ -1,0 +1,15 @@
+---
+# Set after read-only Pi discovery, through an ignored local vars file.
+cp03_netboot_provisioning_interface: ''
+cp03_netboot_provisioning_address: ''
+cp03_netboot_dnsmasq_package_version: ''
+cp03_netboot_sbsigntool_package_version: ''
+cp03_netboot_binutils_package_version: ''
+cp03_netboot_boot_root: /srv/homelab-netboot
+cp03_netboot_boot_config_dir: /etc/homelab-netboot
+# Talos v1.14.1's UKI detection checks for this case-sensitive prefix.
+# This alone did not make the flag true on the HP's direct PXE path; see runbook.
+cp03_netboot_boot_filename: Talos-v1.14.1-amd64-secureboot.efi
+
+# Exactly one inventory node per window; cp03 preserves the original default.
+cp03_netboot_target_node: cp03

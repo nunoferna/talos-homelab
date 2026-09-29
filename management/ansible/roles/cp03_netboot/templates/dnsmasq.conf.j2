@@ -1,0 +1,33 @@
+# Managed by Ansible. Target: {{ cp03_netboot_target_node }} only.
+# This file is standalone: do not include /etc/dnsmasq.conf or dnsmasq.d.
+port=0
+no-resolv
+no-hosts
+interface={{ cp03_netboot_provisioning_interface }}
+bind-interfaces
+except-interface=lo
+no-dhcpv6-interface={{ cp03_netboot_provisioning_interface }}
+
+# The ISP router remains the ONLY address allocator.
+dhcp-range={{ homelab.network.subnet }},proxy,{{ homelab.network.netmask }}
+# dnsmasq opens a lease database even in proxy-only mode. Keep it ephemeral.
+dhcp-leasefile={{ cp03_netboot_lease_file | default('/run/homelab-netboot/dnsmasq.leases') }}
+dhcp-host={{ homelab.nodes[cp03_netboot_target_node].mac }},set:netboot_target
+dhcp-ignore=tag:!netboot_target
+dhcp-match=set:efi64,option:client-arch,7
+dhcp-match=set:efi64,option:client-arch,9
+dhcp-ignore=tag:!efi64
+pxe-service=tag:netboot_target,BC_EFI,"Talos {{ cp03_netboot_target_node }} maintenance",{{ cp03_netboot_boot_filename }},{{ cp03_netboot_provisioning_address }}
+pxe-service=tag:netboot_target,X86-64_EFI,"Talos {{ cp03_netboot_target_node }} maintenance",{{ cp03_netboot_boot_filename }},{{ cp03_netboot_provisioning_address }}
+dhcp-boot=tag:netboot_target,{{ cp03_netboot_boot_filename }},,{{ cp03_netboot_provisioning_address }}
+
+# Only public signed boot code is served here. Never put machine configs here.
+enable-tftp={{ cp03_netboot_provisioning_interface }}
+tftp-root={{ cp03_netboot_boot_root }}
+tftp-secure
+user=nobody
+group=nogroup
+log-dhcp
+log-facility=-
+# Foreground process is tracked by systemd; do not create a shared PID file.
+pid-file=

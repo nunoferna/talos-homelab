@@ -1,0 +1,20 @@
+[Unit]
+Description=Temporary {{ cp03_netboot_target_node }} Talos Secure Boot PXE qualification
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+RuntimeDirectory=homelab-netboot
+ExecStartPre=/usr/sbin/dnsmasq --test --conf-file={{ cp03_netboot_boot_config_dir }}/dnsmasq.conf
+ExecStart=/usr/sbin/dnsmasq --keep-in-foreground --conf-file={{ cp03_netboot_boot_config_dir }}/dnsmasq.conf
+Restart=no
+# Bound the LAN exposure of each explicitly approved test window.
+RuntimeMaxSec=15min
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadOnlyPaths={{ cp03_netboot_boot_root }} {{ cp03_netboot_boot_config_dir }}
+RestrictAddressFamilies=AF_INET AF_UNIX AF_NETLINK AF_PACKET
+
+# Intentionally no [Install] target. Start manually for an approved test only.

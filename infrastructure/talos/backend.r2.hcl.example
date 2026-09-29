@@ -1,0 +1,6 @@
+# Copy to ignored .local/r2-backend.hcl and replace these public identifiers.
+# Use the exact jurisdictional endpoint supplied by the Cloudflare dashboard.
+bucket = "REPLACE_WITH_PRIVATE_STATE_BUCKET"
+endpoints = {
+  s3 = "https://REPLACE_WITH_ACCOUNT_ID.r2.cloudflarestorage.com"
+}

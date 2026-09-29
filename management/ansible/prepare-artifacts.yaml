@@ -1,0 +1,18 @@
+---
+- name: Prepare and verify public boot artifacts without any network services
+  hosts: provisioning
+  gather_facts: false
+  become: true
+  vars_files:
+    - boot-artifacts.yaml
+  pre_tasks:
+    - name: Require explicit SSH destination
+      ansible.builtin.assert:
+        that:
+          - ansible_host | length > 0
+          - ansible_user | length > 0
+  tasks:
+    - name: Prepare artifacts independently of the eventual boot interface
+      ansible.builtin.import_role:
+        name: cp03_netboot
+        tasks_from: artifacts

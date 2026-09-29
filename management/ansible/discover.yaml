@@ -1,0 +1,32 @@
+---
+- name: Read-only provisioning host discovery
+  hosts: provisioning
+  gather_facts: false
+  tasks:
+    - name: Require explicit SSH connection details
+      ansible.builtin.assert:
+        that:
+          - ansible_host | length > 0
+          - ansible_user | length > 0
+        fail_msg: Set PI_HOST and PI_USER to the verified Raspberry Pi SSH destination.
+      delegate_to: localhost
+
+    - name: Read operating system, interfaces, storage and service listeners
+      ansible.builtin.raw: |
+        set -eu
+        uname -a
+        cat /etc/os-release
+        ip -brief address
+        ip route
+        lsblk -o NAME,SIZE,TYPE,MOUNTPOINTS
+        df -h / /var
+        ss -lntu
+        systemctl --no-pager --plain list-units --type=service --state=running
+        dpkg-query -W dnsmasq dnsmasq-base sbsigntool binutils 2>/dev/null || true
+      register: discovery
+      changed_when: false
+      check_mode: false
+
+    - name: Show discovery for review without saving host data in Git
+      ansible.builtin.debug:
+        var: discovery.stdout_lines

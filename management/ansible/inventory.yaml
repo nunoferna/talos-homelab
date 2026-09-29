@@ -1,0 +1,9 @@
+---
+all:
+  children:
+    provisioning:
+      hosts:
+        pi500:
+          # Access details are operator-local; no guessed default username/address.
+          ansible_host: "{{ lookup('ansible.builtin.env', 'PI_HOST') }}"
+          ansible_user: "{{ lookup('ansible.builtin.env', 'PI_USER') }}"

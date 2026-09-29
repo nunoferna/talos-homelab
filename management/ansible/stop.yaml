@@ -1,0 +1,10 @@
+---
+- name: Close the PXE qualification window
+  hosts: provisioning
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Stop the dedicated service
+      ansible.builtin.systemd_service:
+        name: homelab-netboot.service
+        state: stopped

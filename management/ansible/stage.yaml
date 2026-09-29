@@ -1,0 +1,15 @@
+---
+- name: Prepare a stopped single-node PXE service
+  hosts: provisioning
+  gather_facts: false
+  become: true
+  vars_files:
+    - boot-artifacts.yaml
+  pre_tasks:
+    - name: Require explicit host access
+      ansible.builtin.assert:
+        that:
+          - ansible_host | length > 0
+          - ansible_user | length > 0
+  roles:
+    - cp03_netboot
