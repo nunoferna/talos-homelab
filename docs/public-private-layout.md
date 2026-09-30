@@ -8,6 +8,7 @@ identity, live reconciliation, and recovery material.
 Safe to publish after automated and manual review:
 
 - OpenTofu and Ansible source code
+- the OpenTofu-owned, day-zero Cilium Helm release
 - dependency lock files and immutable public artifact digests
 - documentation-only inventories using reserved addresses and example identifiers
 - generic operating procedures with no environment history
@@ -15,11 +16,11 @@ Safe to publish after automated and manual review:
 
 ## Public platform repository
 
-The public platform repository is a reusable catalog, not the cluster's Flux
-entry point. It may contain:
+The public platform repository is a reusable catalog above the CNI layer, not
+the cluster's Flux entry point. It may contain:
 
 - pinned Flux `HelmRepository`, `OCIRepository`, and `HelmRelease` resources
-- generic Cilium, storage, OpenBao, External Secrets Operator, ingress, and
+- generic storage, OpenBao, External Secrets Operator, ingress, and
   monitoring configuration
 - namespaces, service accounts, RBAC, and network policies without private
   names, addresses, credentials, or provider account identifiers
@@ -29,6 +30,9 @@ entry point. It may contain:
 Publishing Kubernetes YAML does not make it safe automatically. Treat internal
 DNS names, IP ranges, certificate subjects, storage endpoints, tenant names,
 and application metadata as private unless deliberately sanitized.
+
+Cilium is excluded from Flux ownership. The foundation repository owns its
+Helm release through a dedicated OpenTofu root and separate encrypted state.
 
 ## Private live repository
 

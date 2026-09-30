@@ -54,8 +54,8 @@ machine configurations remain ignored or in the private live repository.
    and verify that every non-host-network pod is Cilium-managed.
 7. Run Cilium connectivity tests plus Kubernetes API, DNS, cross-node, service,
    and controlled node-reboot checks.
-8. Commit the exact release as a Flux-managed component only after bootstrap;
-   Flux must adopt identical values without changing the live Helm release.
+8. Import the day-zero Helm release into the dedicated Cilium OpenTofu state.
+   The reviewed adoption plan must not replace or delete the live release.
 
 Do not enable namespace default-deny policies during this operation.
 

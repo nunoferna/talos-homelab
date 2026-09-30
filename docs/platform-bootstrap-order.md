@@ -4,7 +4,8 @@ The platform is built in dependency order. A higher layer must not be required
 to recover a lower layer.
 
 1. **Cilium CNI** provides pod networking and policy enforcement.
-2. **Flux** reconciles the private live root and pinned public platform sources.
+2. **Flux** reconciles the private live root and pinned public platform sources,
+   but never owns Cilium.
 3. **Persistent storage** supplies tested failure and snapshot semantics.
 4. **OpenBao** runs as a three-replica integrated-Raft service with TLS,
    anti-affinity, a disruption budget, audit logging, and one persistent volume
@@ -18,9 +19,9 @@ to recover a lower layer.
 ## Why Cilium precedes Flux
 
 Flux controllers require working pod networking. Cilium is therefore a day-0
-component: install it from a reviewed, version-pinned Helm values file, validate
-the cluster, bootstrap Flux, and then let Flux adopt the identical release. This
-is the only planned out-of-band platform installation.
+component permanently owned by a dedicated OpenTofu root and encrypted state.
+Validate Cilium before bootstrapping Flux; do not create a Flux `HelmRelease`
+for it or allow two reconcilers to own the same Helm release.
 
 Use standard Kubernetes `NetworkPolicy` when it expresses the requirement and
 `CiliumNetworkPolicy` only for Cilium-specific features such as FQDN or layer-7

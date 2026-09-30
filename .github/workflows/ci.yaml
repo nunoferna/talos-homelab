@@ -63,8 +63,12 @@ jobs:
         with:
           tofu_version: 1.12.6
       - name: Check formatting
-        run: tofu -chdir=infrastructure/talos fmt -check -diff
-      - name: Initialize without the remote backend
-        run: tofu -chdir=infrastructure/talos init -backend=false -input=false
-      - name: Validate configuration
-        run: tofu -chdir=infrastructure/talos validate
+        run: tofu fmt -check -diff -recursive infrastructure
+      - name: Initialize roots without remote backends
+        run: |
+          tofu -chdir=infrastructure/talos init -backend=false -input=false
+          tofu -chdir=infrastructure/cilium init -backend=false -input=false
+      - name: Validate roots
+        run: |
+          tofu -chdir=infrastructure/talos validate
+          tofu -chdir=infrastructure/cilium validate
