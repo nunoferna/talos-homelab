@@ -16,12 +16,12 @@ tasks:
     dir: management/ansible
     preconditions:
       - test -f ../../.local/pi.yaml
-      - test -f ../../.local/talos-homelab-gitops/inventory/homelab.yaml
+      - test -f "{{.ROOT_DIR}}/../talos-homelab-gitops/inventory/homelab.yaml"
     cmds:
       - >-
         ansible-playbook stage.yaml
         --extra-vars @../../.local/pi.yaml
-        --extra-vars @../../.local/talos-homelab-gitops/inventory/homelab.yaml
+        --extra-vars @"{{.ROOT_DIR}}/../talos-homelab-gitops/inventory/homelab.yaml"
 
   pi:artifacts:
     desc: Download and verify public boot artifacts without starting any services

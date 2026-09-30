@@ -50,7 +50,8 @@ tofu -chdir=infrastructure/talos validate
 For a real plan, provide all environment-specific values explicitly. Example:
 
 ```sh
-export TF_VAR_inventory_file="$PWD/.local/talos-homelab-gitops/inventory/homelab.yaml"
+export GITOPS_REPO="${GITOPS_REPO:-$PWD/../talos-homelab-gitops}"
+export TF_VAR_inventory_file="$GITOPS_REPO/inventory/homelab.yaml"
 export TF_VAR_bootstrap_endpoint="REPLACE_WITH_VERIFIED_NODE_OR_TUNNEL_ENDPOINT"
 export TF_VAR_state_passphrase="$(security find-generic-password -w -s homelab-state-passphrase)"
 export AWS_PROFILE=REPLACE_WITH_SCOPED_R2_PROFILE
