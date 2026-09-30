@@ -2,7 +2,8 @@
 
 Reusable OpenTofu and Ansible building blocks for a three-node Talos Linux
 cluster with Secure Boot, an API virtual IP, encrypted remote state, and a
-separate provisioning host. Flux is intended to own Kubernetes workloads.
+separate provisioning host. OpenTofu also owns the day-zero Cilium Helm
+release; Flux is intended to own Kubernetes workloads above the CNI layer.
 
 This public repository contains code and documentation examples only. Generic
 GitOps resources belong in a separate public platform repository. Real network
@@ -14,6 +15,8 @@ repository or ignored local storage.
 
 - `infrastructure/talos/`: OpenTofu configuration for Talos identity, machine
   configuration rendering, and the one-time cluster bootstrap record.
+- `infrastructure/cilium/`: OpenTofu configuration for the Cilium Helm release,
+  with an independent encrypted and locked state.
 - `management/ansible/`: narrowly scoped provisioning-host discovery and
   single-node PXE staging tools.
 - `inventory/homelab.example.yaml`: documentation-only inventory using the
@@ -29,16 +32,16 @@ value, and pass its path explicitly at runtime.
 
 ## Validation
 
-The repository pins OpenTofu 1.12.6 and the Sidero Labs Talos provider 0.12.0.
-Static CI checks scan for committed secrets and validate YAML, Ansible, Python,
-and OpenTofu configuration.
+The repository pins OpenTofu 1.12.6, the Sidero Labs Talos provider 0.12.0, and
+the HashiCorp Helm provider 3.3.0. Static CI checks scan for committed secrets
+and validate YAML, Ansible, Python, and both OpenTofu roots.
 
 Run the local checks from the repository root:
 
 ```sh
 yamllint .
 task validate
-tofu -chdir=infrastructure/talos fmt -check -diff
+tofu fmt -check -diff -recursive infrastructure
 ```
 
 OpenTofu validation requires provider initialization but does not require access
@@ -47,6 +50,8 @@ to the live backend:
 ```sh
 tofu -chdir=infrastructure/talos init -backend=false
 tofu -chdir=infrastructure/talos validate
+tofu -chdir=infrastructure/cilium init -backend=false
+tofu -chdir=infrastructure/cilium validate
 ```
 
 ## Private inputs

@@ -32,10 +32,9 @@ tofu -chdir=infrastructure/cilium plan \
   -out=/absolute/path/to/private/reviewed.tfplan
 ```
 
-Apply only the reviewed saved plan. The initial plan imports the existing
-day-zero release at `kube-system/cilium`; it must show no replacement or
-deletion. Remove the temporary `import` block after adoption and confirm a
-second no-change plan.
+Apply only the reviewed saved plan. The existing day-zero release at
+`kube-system/cilium` was adopted through a declarative import recorded in Git
+history. Ordinary plans must not replace or delete it.
 
 The values checksum in `release.yaml` prevents an unreviewed values-file edit
 from reaching Helm. When intentionally changing values, review the rendered

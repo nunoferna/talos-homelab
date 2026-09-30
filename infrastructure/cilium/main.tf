@@ -28,10 +28,3 @@ resource "helm_release" "cilium" {
     }
   }
 }
-
-# Adopt the day-zero Helm installation without replacing it. Remove this block
-# after the reviewed import plan has been applied; Git history preserves it.
-import {
-  to = helm_release.cilium
-  id = "kube-system/cilium"
-}
