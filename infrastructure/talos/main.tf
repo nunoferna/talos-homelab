@@ -74,6 +74,18 @@ data "talos_machine_configuration" "controlplane" {
         "$patch" = "delete"
       }
     }),
+    # Cilium owns pod networking and service load-balancing. These documents
+    # match the Talos v1.14 no-kube-proxy Cilium configuration.
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "KubeFlannelCNIConfig"
+      "$patch"   = "delete"
+    }),
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "KubeProxyConfig"
+      enabled    = false
+    }),
   ]
   # Rendering has no node side effects. Delivery is a separate reviewed operation.
 }

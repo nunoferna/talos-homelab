@@ -50,6 +50,12 @@ Review the complete plan for identity replacement, bootstrap replacement, and
 node configuration changes. Applying rendered output changes does not deliver
 configuration to nodes; delivery remains a separate reviewed operation.
 
+The rendered configuration removes Talos' built-in Flannel deployment and
+disables kube-proxy so Cilium can own pod networking and service routing. Never
+deliver that configuration until the matching, pinned Cilium chart is locally
+available and the CNI cutover runbook has been reviewed. Removing Flannel before
+Cilium is ready causes an expected pod-network outage.
+
 Export sensitive outputs only to mode-0600 files in ignored storage. Validate
 rendered machine configurations with the matching `talosctl` release before any
 node operation.
