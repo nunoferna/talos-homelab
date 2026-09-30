@@ -4,9 +4,10 @@ Reusable OpenTofu and Ansible building blocks for a three-node Talos Linux
 cluster with Secure Boot, an API virtual IP, encrypted remote state, and a
 separate provisioning host. Flux is intended to own Kubernetes workloads.
 
-This public repository contains code and documentation examples only. Real
-network addresses, hardware identifiers, operational history, credentials,
-state, recovery artifacts, and GitOps manifests belong in a separate private
+This public repository contains code and documentation examples only. Generic
+GitOps resources belong in a separate public platform repository. Real network
+addresses, hardware identifiers, operational history, credentials, state,
+recovery artifacts, and the live Flux reconciliation root belong in a private
 repository or ignored local storage.
 
 ## Repository boundary
@@ -17,8 +18,11 @@ repository or ignored local storage.
   single-node PXE staging tools.
 - `inventory/homelab.example.yaml`: documentation-only inventory using the
   RFC 5737 TEST-NET-1 range and locally administered example MAC addresses.
-- `docs/public-private-layout.md`: the required separation between public code,
-  private GitOps data, and recovery material.
+- `docs/public-private-layout.md`: the required separation between public
+  foundation code, public platform resources, private live data, and recovery
+  material.
+- `docs/platform-bootstrap-order.md`: the dependency-ordered path from Cilium
+  through Flux, storage, OpenBao, External Secrets Operator, and applications.
 
 Never apply the example inventory. Copy it into private storage, replace every
 value, and pass its path explicitly at runtime.
