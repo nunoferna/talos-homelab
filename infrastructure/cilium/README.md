@@ -36,6 +36,7 @@ Apply only the reviewed saved plan. The existing day-zero release at
 `kube-system/cilium` was adopted through a declarative import recorded in Git
 history. Ordinary plans must not replace or delete it.
 
-The values checksum in `release.yaml` prevents an unreviewed values-file edit
-from reaching Helm. When intentionally changing values, review the rendered
-chart and update the checksum in the same commit.
+`release.yaml` intentionally contains only inputs consumed by OpenTofu. Its
+values checksum prevents an unreviewed values-file edit from reaching Helm.
+When intentionally changing values, review the rendered chart and update the
+checksum in the same commit.

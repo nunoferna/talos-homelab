@@ -1,13 +1,4 @@
 repository: oci://quay.io/cilium/charts
 chart: cilium
 version: 1.20.2
-ociManifestDigest: sha256:a7c12d330dd96bfcda3bf057b24be8f36566c34868265f930f776dff6f42d838
-chartBlobSha256: b2afd87b7f75f875f92a14559f14f59b7babbb479d968e3fd625a20bf30ec20e
 valuesSha256: 0ed98b49c081a912c4c47bdbecd764c80600d0bdf8cc4519123422b4f0320978
-signature:
-  certificateIssuer: https://token.actions.githubusercontent.com
-  certificateIdentityRegexp: https://github.com/cilium/cilium/.*
-compatibility:
-  kubernetes: 1.37.0
-  upstreamGuaranteedThrough: '1.36'
-  riskAccepted: true
