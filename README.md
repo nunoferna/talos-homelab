@@ -76,3 +76,10 @@ high-impact operation.
 Generated Talos machine configurations, kubeconfigs, state files, plan files,
 packet captures, age private keys, and etcd snapshots must never enter this
 repository.
+
+## Private deployment runner
+
+The Raspberry Pi can host the out-of-cluster GitHub Actions runner used by the
+private control repository. The public preparation playbook installs only
+checksum-pinned tooling; registration remains a deliberate manual boundary. See
+[the runner runbook](docs/rpi-actions-runner.md).

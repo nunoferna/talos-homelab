@@ -1,0 +1,13 @@
+---
+- name: Prepare the Raspberry Pi GitHub Actions control runner
+  hosts: provisioning
+  gather_facts: true
+  become: true
+  pre_tasks:
+    - name: Require explicit SSH destination
+      ansible.builtin.assert:
+        that:
+          - ansible_host | length > 0
+          - ansible_user | length > 0
+  roles:
+    - github_actions_runner

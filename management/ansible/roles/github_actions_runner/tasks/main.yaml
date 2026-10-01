@@ -1,0 +1,163 @@
+---
+- name: Require a supported Raspberry Pi userspace architecture
+  ansible.builtin.assert:
+    that:
+      - ansible_architecture in github_actions_runner_artifacts
+    fail_msg: >-
+      Unsupported userspace architecture {{ ansible_architecture }}. Supported
+      values are armv7l and aarch64.
+
+- name: Select checksummed artifacts for the Pi architecture
+  ansible.builtin.set_fact:
+    github_actions_runner_artifact: >-
+      {{ github_actions_runner_artifacts[ansible_architecture] }}
+
+- name: Build the architecture-specific artifact names
+  ansible.builtin.set_fact:
+    github_actions_runner_archive_name: >-
+      actions-runner-linux-{{ github_actions_runner_artifact.runner_arch
+      }}-{{ github_actions_runner_version }}.tar.gz
+    github_actions_runner_tofu_package_name: >-
+      tofu_{{ github_actions_runner_tofu_version
+      }}_{{ github_actions_runner_artifact.tofu_arch }}.deb
+
+- name: Install runner runtime dependencies
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - git
+      - jq
+      - libcurl4
+      - libicu72
+      - libkrb5-3
+      - liblttng-ust1
+      - libssl3
+      - libunwind8
+      - libuuid1
+      - unzip
+      - zlib1g
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create the dedicated runner group
+  ansible.builtin.group:
+    name: "{{ github_actions_runner_group }}"
+    system: true
+
+- name: Create the dedicated runner account
+  ansible.builtin.user:
+    name: "{{ github_actions_runner_user }}"
+    group: "{{ github_actions_runner_group }}"
+    home: /var/lib/github-runner
+    shell: /bin/bash
+    create_home: true
+    system: true
+
+- name: Create runner-owned runtime directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ github_actions_runner_user }}"
+    group: "{{ github_actions_runner_group }}"
+    mode: "0700"
+  loop:
+    - "{{ github_actions_runner_work_directory }}"
+    - /var/lib/github-runner/runtime
+
+- name: Create the versioned runner installation directory
+  ansible.builtin.file:
+    path: "{{ github_actions_runner_install_root }}/{{ github_actions_runner_version }}"
+    state: directory
+    owner: "{{ github_actions_runner_user }}"
+    group: "{{ github_actions_runner_group }}"
+    mode: "0755"
+
+- name: Download the checksummed GitHub Actions runner
+  ansible.builtin.get_url:
+    url: >-
+      https://github.com/actions/runner/releases/download/v{{
+      github_actions_runner_version }}/{{ github_actions_runner_archive_name }}
+    dest: "/var/cache/{{ github_actions_runner_archive_name }}"
+    checksum: "sha256:{{ github_actions_runner_artifact.runner_sha256 }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Extract the pinned GitHub Actions runner
+  ansible.builtin.unarchive:
+    src: "/var/cache/{{ github_actions_runner_archive_name }}"
+    dest: "{{ github_actions_runner_install_root }}/{{ github_actions_runner_version }}"
+    remote_src: true
+    owner: "{{ github_actions_runner_user }}"
+    group: "{{ github_actions_runner_group }}"
+    creates: >-
+      {{ github_actions_runner_install_root }}/{{ github_actions_runner_version }}/bin/Runner.Listener
+
+- name: Point current at the pinned runner release
+  ansible.builtin.file:
+    src: "{{ github_actions_runner_install_root }}/{{ github_actions_runner_version }}"
+    dest: "{{ github_actions_runner_install_root }}/current"
+    state: link
+    owner: root
+    group: root
+    force: true
+
+- name: Download the checksummed OpenTofu package
+  ansible.builtin.get_url:
+    url: >-
+      https://github.com/opentofu/opentofu/releases/download/v{{
+      github_actions_runner_tofu_version }}/{{
+      github_actions_runner_tofu_package_name }}
+    dest: "/var/cache/{{ github_actions_runner_tofu_package_name }}"
+    checksum: "sha256:{{ github_actions_runner_artifact.tofu_deb_sha256 }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install the pinned OpenTofu package
+  ansible.builtin.apt:
+    deb: "/var/cache/{{ github_actions_runner_tofu_package_name }}"
+    state: present
+
+- name: Install checksummed kubectl matching the cluster minor
+  ansible.builtin.get_url:
+    url: >-
+      https://dl.k8s.io/release/v{{ github_actions_runner_kubectl_version
+      }}/bin/linux/{{ github_actions_runner_artifact.kubectl_arch }}/kubectl
+    dest: /usr/local/bin/kubectl
+    checksum: "sha256:{{ github_actions_runner_artifact.kubectl_sha256 }}"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Record the intentionally manual registration boundary
+  ansible.builtin.copy:
+    dest: /etc/homelab-runner-registration-required
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      The runner binaries and toolchain are installed, but this host is not
+      registered automatically. Register it only with the private
+      nunoferna/talos-homelab-gitops repository by following
+      docs/rpi-actions-runner.md in the public foundation repository.
+
+- name: Verify the pinned OpenTofu runtime
+  ansible.builtin.command:
+    cmd: tofu version
+  changed_when: false
+  register: github_actions_runner_tofu_version_output
+
+- name: Require the expected OpenTofu version
+  ansible.builtin.assert:
+    that:
+      - >-
+        ('OpenTofu v' ~ github_actions_runner_tofu_version) in
+        github_actions_runner_tofu_version_output.stdout
+
+- name: Verify the pinned kubectl client
+  ansible.builtin.command:
+    cmd: kubectl version --client
+  changed_when: false
