@@ -48,9 +48,10 @@ sudo -u github-runner /opt/actions-runner/current/config.sh \
   --unattended
 
 unset RUNNER_TOKEN
-sudo /opt/actions-runner/current/svc.sh install github-runner
-sudo /opt/actions-runner/current/svc.sh start
-sudo /opt/actions-runner/current/svc.sh status
+cd /opt/actions-runner/current
+sudo ./svc.sh install github-runner
+sudo ./svc.sh start
+sudo ./svc.sh status
 ```
 
 Confirm that `pi500-control` is online in the private repository before
@@ -67,5 +68,6 @@ configuring deployment secrets. Do not add the runner to the public repository.
   Kubernetes or OpenBao.
 
 The current Pi uses 32-bit `armhf` userspace, which is supported by the pinned
-artifacts. A later 64-bit OS migration is recommended but is not coupled to the
-initial runner setup.
+artifacts. The official ARM32 runner currently bundles Node 20 but not Node 24,
+so private workflows pin compatible action releases. A later 64-bit OS migration
+is recommended; after it, migrate those actions to their Node 24 releases.

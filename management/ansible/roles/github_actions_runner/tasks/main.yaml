@@ -1,25 +1,42 @@
 ---
-- name: Require a supported Raspberry Pi userspace architecture
+- name: Detect the Debian userspace architecture
+  ansible.builtin.command:
+    cmd: dpkg --print-architecture
+  changed_when: false
+  register: github_actions_runner_userspace_architecture
+
+- name: Require supported runner and tool architectures
   ansible.builtin.assert:
     that:
-      - ansible_facts['architecture'] in github_actions_runner_artifacts
+      - >-
+        github_actions_runner_userspace_architecture.stdout in
+        github_actions_runner_runtime_artifacts
+      - ansible_facts['architecture'] in github_actions_runner_tool_artifacts
     fail_msg: >-
-      Unsupported userspace architecture {{ ansible_facts['architecture'] }}.
-      Supported values are armv7l and aarch64.
+      Unsupported architecture combination: userspace
+      {{ github_actions_runner_userspace_architecture.stdout }}, kernel
+      {{ ansible_facts['architecture'] }}.
 
 - name: Select checksummed artifacts for the Pi architecture
   ansible.builtin.set_fact:
-    github_actions_runner_artifact: >-
-      {{ github_actions_runner_artifacts[ansible_facts['architecture']] }}
+    github_actions_runner_runtime_artifact: >-
+      {{ github_actions_runner_runtime_artifacts[
+      github_actions_runner_userspace_architecture.stdout] }}
+    github_actions_runner_tool_artifact: >-
+      {{ github_actions_runner_tool_artifacts[
+      ansible_facts['architecture']] }}
 
 - name: Build the architecture-specific artifact names
   ansible.builtin.set_fact:
     github_actions_runner_archive_name: >-
-      actions-runner-linux-{{ github_actions_runner_artifact.runner_arch
+      actions-runner-linux-{{ github_actions_runner_runtime_artifact.runner_arch
       }}-{{ github_actions_runner_version }}.tar.gz
+    github_actions_runner_install_directory: >-
+      {{ github_actions_runner_install_root }}/{{ github_actions_runner_version
+      }}-{{ github_actions_runner_runtime_artifact.runner_arch }}
     github_actions_runner_tofu_package_name: >-
       tofu_{{ github_actions_runner_tofu_version
-      }}_{{ github_actions_runner_artifact.tofu_arch }}.deb
+      }}_{{ github_actions_runner_tool_artifact.tofu_arch }}.deb
 
 - name: Install runner runtime dependencies
   ansible.builtin.apt:
@@ -68,7 +85,7 @@
 
 - name: Create the versioned runner installation directory
   ansible.builtin.file:
-    path: "{{ github_actions_runner_install_root }}/{{ github_actions_runner_version }}"
+    path: "{{ github_actions_runner_install_directory }}"
     state: directory
     owner: "{{ github_actions_runner_user }}"
     group: "{{ github_actions_runner_group }}"
@@ -80,7 +97,7 @@
       https://github.com/actions/runner/releases/download/v{{
       github_actions_runner_version }}/{{ github_actions_runner_archive_name }}
     dest: "/var/cache/{{ github_actions_runner_archive_name }}"
-    checksum: "sha256:{{ github_actions_runner_artifact.runner_sha256 }}"
+    checksum: "sha256:{{ github_actions_runner_runtime_artifact.runner_sha256 }}"
     owner: root
     group: root
     mode: "0644"
@@ -88,16 +105,16 @@
 - name: Extract the pinned GitHub Actions runner
   ansible.builtin.unarchive:
     src: "/var/cache/{{ github_actions_runner_archive_name }}"
-    dest: "{{ github_actions_runner_install_root }}/{{ github_actions_runner_version }}"
+    dest: "{{ github_actions_runner_install_directory }}"
     remote_src: true
     owner: "{{ github_actions_runner_user }}"
     group: "{{ github_actions_runner_group }}"
     creates: >-
-      {{ github_actions_runner_install_root }}/{{ github_actions_runner_version }}/bin/Runner.Listener
+      {{ github_actions_runner_install_directory }}/bin/Runner.Listener
 
 - name: Point current at the pinned runner release
   ansible.builtin.file:
-    src: "{{ github_actions_runner_install_root }}/{{ github_actions_runner_version }}"
+    src: "{{ github_actions_runner_install_directory }}"
     dest: "{{ github_actions_runner_install_root }}/current"
     state: link
     owner: root
@@ -112,7 +129,7 @@
       github_actions_runner_tofu_version }}/{{
       github_actions_runner_tofu_package_name }}
     dest: "/var/cache/{{ github_actions_runner_tofu_package_name }}"
-    checksum: "sha256:{{ github_actions_runner_artifact.tofu_deb_sha256 }}"
+    checksum: "sha256:{{ github_actions_runner_tool_artifact.tofu_deb_sha256 }}"
     owner: root
     group: root
     mode: "0644"
@@ -126,9 +143,9 @@
   ansible.builtin.get_url:
     url: >-
       https://dl.k8s.io/release/v{{ github_actions_runner_kubectl_version
-      }}/bin/linux/{{ github_actions_runner_artifact.kubectl_arch }}/kubectl
+      }}/bin/linux/{{ github_actions_runner_tool_artifact.kubectl_arch }}/kubectl
     dest: /usr/local/bin/kubectl
-    checksum: "sha256:{{ github_actions_runner_artifact.kubectl_sha256 }}"
+    checksum: "sha256:{{ github_actions_runner_tool_artifact.kubectl_sha256 }}"
     owner: root
     group: root
     mode: "0755"
