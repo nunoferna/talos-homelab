@@ -5,6 +5,30 @@ github_actions_runner_group: github-runner
 github_actions_runner_install_root: /opt/actions-runner
 github_actions_runner_work_directory: /var/lib/github-runner/work
 
+github_actions_runner_runtime_dependencies_common:
+  - ca-certificates
+  - curl
+  - git
+  - jq
+  - libkrb5-3
+  - libunwind8
+  - libuuid1
+  - unzip
+  - zlib1g
+
+github_actions_runner_runtime_dependencies_by_release:
+  Debian:
+    "12":
+      - libcurl4
+      - libicu72
+      - liblttng-ust1
+      - libssl3
+    "13":
+      - libcurl4t64
+      - libicu76
+      - liblttng-ust1t64
+      - libssl3t64
+
 github_actions_runner_runtime_artifacts:
   armhf:
     runner_arch: arm

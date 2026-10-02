@@ -5,9 +5,10 @@ OpenTofu plans and applies. It must be registered only with the private
 `nunoferna/talos-homelab-gitops` repository. Public pull requests must never
 schedule jobs on it.
 
-The preparation playbook installs checksum-pinned ARM32 or ARM64 builds of the
-GitHub Actions runner, OpenTofu and kubectl. It does not register or start the
-runner and never handles a GitHub registration token.
+The preparation playbook requires a 64-bit ARM kernel and userspace, then
+installs checksum-pinned ARM64 builds of the GitHub Actions runner, OpenTofu and
+kubectl. It does not register or start the runner and never handles a GitHub
+registration token.
 
 ## Prepare the host
 
@@ -62,12 +63,11 @@ configuring deployment secrets. Do not add the runner to the public repository.
 - The runner receives jobs only from the private repository.
 - The private workflow checks out only a protected, merged public commit.
 - Cluster and R2 credentials are injected through GitHub environments.
-- Runtime files are created below the runner temporary directory and removed
+- Runtime files are created as hidden files below the job workspace and removed
   after every job.
 - Bootstrap credentials and the state passphrase remain recoverable without
   Kubernetes or OpenBao.
 
-The current Pi uses 32-bit `armhf` userspace, which is supported by the pinned
-artifacts. The official ARM32 runner currently bundles Node 20 but not Node 24,
-so private workflows pin compatible action releases. A later 64-bit OS migration
-is recommended; after it, migrate those actions to their Node 24 releases.
+The control host must report `aarch64` from `uname -m` and `arm64` from
+`dpkg --print-architecture`. The private workflow pins Node 24 action releases;
+GitHub no longer supports JavaScript actions on Linux ARM32 runners.

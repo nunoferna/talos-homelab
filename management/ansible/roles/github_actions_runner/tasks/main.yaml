@@ -17,6 +17,21 @@
       {{ github_actions_runner_userspace_architecture.stdout }}, kernel
       {{ ansible_facts['architecture'] }}.
 
+- name: Require a supported Debian runtime dependency set
+  ansible.builtin.assert:
+    that:
+      - >-
+        ansible_facts['distribution'] in
+        github_actions_runner_runtime_dependencies_by_release
+      - >-
+        ansible_facts['distribution_major_version'] in
+        github_actions_runner_runtime_dependencies_by_release[
+        ansible_facts['distribution']]
+    fail_msg: >-
+      No pinned GitHub Actions runner dependency set exists for
+      {{ ansible_facts['distribution'] }}
+      {{ ansible_facts['distribution_major_version'] }}.
+
 - name: Select checksummed artifacts for the Pi architecture
   ansible.builtin.set_fact:
     github_actions_runner_runtime_artifact: >-
@@ -40,20 +55,11 @@
 
 - name: Install runner runtime dependencies
   ansible.builtin.apt:
-    name:
-      - ca-certificates
-      - curl
-      - git
-      - jq
-      - libcurl4
-      - libicu72
-      - libkrb5-3
-      - liblttng-ust1
-      - libssl3
-      - libunwind8
-      - libuuid1
-      - unzip
-      - zlib1g
+    name: >-
+      {{ github_actions_runner_runtime_dependencies_common
+      + github_actions_runner_runtime_dependencies_by_release[
+      ansible_facts['distribution']][
+      ansible_facts['distribution_major_version']] }}
     state: present
     update_cache: true
     cache_valid_time: 3600
