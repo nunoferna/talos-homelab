@@ -2,15 +2,15 @@
 - name: Require a supported Raspberry Pi userspace architecture
   ansible.builtin.assert:
     that:
-      - ansible_architecture in github_actions_runner_artifacts
+      - ansible_facts['architecture'] in github_actions_runner_artifacts
     fail_msg: >-
-      Unsupported userspace architecture {{ ansible_architecture }}. Supported
-      values are armv7l and aarch64.
+      Unsupported userspace architecture {{ ansible_facts['architecture'] }}.
+      Supported values are armv7l and aarch64.
 
 - name: Select checksummed artifacts for the Pi architecture
   ansible.builtin.set_fact:
     github_actions_runner_artifact: >-
-      {{ github_actions_runner_artifacts[ansible_architecture] }}
+      {{ github_actions_runner_artifacts[ansible_facts['architecture']] }}
 
 - name: Build the architecture-specific artifact names
   ansible.builtin.set_fact:
@@ -103,6 +103,7 @@
     owner: root
     group: root
     force: true
+    follow: false
 
 - name: Download the checksummed OpenTofu package
   ansible.builtin.get_url:
