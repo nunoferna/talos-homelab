@@ -17,6 +17,17 @@ Talos identity and bootstrap state.
 - backend bucket, endpoint, and credentials: supplied through the ignored
   backend file and scoped AWS profile.
 
+The private deployment workflow constructs `kubeconfig_file` at runtime. It
+combines the non-secret Kubernetes endpoint and CA with an exec credential that
+requests a short-lived GitHub Actions OIDC token. No Kubernetes kubeconfig,
+client key, or static bearer token is stored in GitHub.
+
+`github-actions-rbac.yaml` grants the plan environment read access plus access
+to Helm release secrets in `kube-system`. The production environment has
+cluster-admin because Cilium manages cluster-scoped networking resources,
+CRDs, webhooks and RBAC. The workflow verifies these authorization boundaries
+before it runs OpenTofu.
+
 ## Safe workflow
 
 ```sh

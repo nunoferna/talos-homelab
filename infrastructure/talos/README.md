@@ -31,6 +31,31 @@ Never use `tofu state pull` as an encrypted backup: it emits decrypted state.
 Preserve verified encrypted backend object versions and the independent
 encryption key instead.
 
+## GitHub Actions workload identity
+
+Control-plane configurations include a Talos `KubeAuthenticationConfig` that
+enables Kubernetes structured authentication for GitHub Actions. The trust is
+restricted to the private `nunoferna/talos-homelab-gitops` repository ID, its
+`cilium-deploy.yaml` workflow on `main`, manual dispatch events, and the
+`cilium-plan` or `cilium-production` GitHub environment. The intended audience
+is `talos-homelab-kubernetes`.
+
+This configuration removes the need to store a Kubernetes client certificate
+or long-lived bearer token in GitHub. It does not grant permissions by itself;
+the separately reviewed RBAC manifest under `infrastructure/cilium` maps the two
+environment-specific usernames to their required privileges.
+
+Roll out authentication changes one control-plane node at a time. For each
+node, validate the rendered machine configuration with Talos 1.14.1, inspect an
+`apply-config --dry-run`, use Talos try mode, confirm API-server and etcd health,
+then commit the configuration before moving to the next node. Keep the existing
+administrator Talos and Kubernetes credentials available throughout.
+
+To roll back, apply a previously reviewed rendered machine configuration that
+does not contain the `KubeAuthenticationConfig`, again one node at a time. The
+administrator client-certificate authentication path remains independent of
+GitHub OIDC. Disable the GitHub workflow before removing its RBAC bindings.
+
 ## Safe workflow
 
 ```sh

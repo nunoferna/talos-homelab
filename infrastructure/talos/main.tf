@@ -86,6 +86,7 @@ data "talos_machine_configuration" "controlplane" {
       kind       = "KubeProxyConfig"
       enabled    = false
     }),
+    yamlencode(local.github_actions_authentication_config),
   ]
   # Rendering has no node side effects. Delivery is a separate reviewed operation.
 }
