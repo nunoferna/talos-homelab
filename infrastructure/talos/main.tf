@@ -38,7 +38,7 @@ data "talos_machine_configuration" "controlplane" {
   docs               = false
   examples           = false
 
-  config_patches = [
+  config_patches = concat([
     yamlencode({
       apiVersion = "v1alpha1"
       kind       = "Layer2VIPConfig"
@@ -96,7 +96,7 @@ data "talos_machine_configuration" "controlplane" {
       enabled    = false
     }),
     yamlencode(local.github_actions_authentication_config),
-  ]
+  ], var.enable_etcd_backup_api_access ? [file("${path.module}/etcd-backup-api-access.yaml")] : [])
   # Rendering has no node side effects. Delivery is a separate reviewed operation.
 }
 

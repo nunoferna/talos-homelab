@@ -2,14 +2,14 @@
 
 Reusable OpenTofu and Ansible building blocks for a three-node Talos Linux
 cluster with Secure Boot, an API virtual IP, encrypted remote state, and a
-separate provisioning host. OpenTofu also owns the day-zero Cilium Helm
-release; Flux is intended to own Kubernetes workloads above the CNI layer.
+separate provisioning host. OpenTofu also owns day-zero Cilium and Flux Helm
+releases; Flux owns the Kubernetes workloads reachable from `clusters/homelab`.
 
-This public repository contains code and documentation examples only. Generic
-GitOps resources belong in a separate public platform repository. Real network
+This public repository contains reusable code, public GitOps resources and
+documentation examples. Real network
 addresses, hardware identifiers, operational history, credentials, state,
-recovery artifacts, and the live Flux reconciliation root belong in a private
-repository or ignored local storage.
+recovery artifacts, and private orchestration inputs belong in a private
+repository or independently secured storage.
 
 ## Repository boundary
 
@@ -17,6 +17,10 @@ repository or ignored local storage.
   configuration rendering, and the one-time cluster bootstrap record.
 - `infrastructure/cilium/`: OpenTofu configuration for the Cilium Helm release,
   with an independent encrypted and locked state.
+- `infrastructure/flux/`: OpenTofu-owned day-zero Flux installation.
+- `clusters/homelab/`: active public Flux reconciliation root.
+- `platform/backup/talos/`: staged upstream encrypted etcd backup configuration;
+  not reconciled or scheduled yet. See its [activation runbook](platform/backup/talos/README.md).
 - `management/ansible/`: narrowly scoped provisioning-host discovery and
   single-node PXE staging tools.
 - `inventory/homelab.example.yaml`: documentation-only inventory using the
@@ -34,7 +38,7 @@ value, and pass its path explicitly at runtime.
 
 The repository pins OpenTofu 1.12.6, the Sidero Labs Talos provider 0.12.0, and
 the HashiCorp Helm provider 3.3.0. Static CI checks scan for committed secrets
-and validate YAML, Ansible, Python, and both OpenTofu roots.
+and validate YAML, Ansible, Python, public manifests, and all three OpenTofu roots.
 
 Run the local checks from the repository root:
 

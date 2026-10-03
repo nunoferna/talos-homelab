@@ -1,3 +1,10 @@
+variable "enable_etcd_backup_api_access" {
+  description = "Opt in to namespace-scoped, snapshot-only Talos API access. Rendering only; reviewed node delivery is separate."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
 variable "state_passphrase" {
   description = "Independently backed-up encryption secret, supplied locally at runtime. Never store it in Git, tfvars, or backend configuration."
   type        = string

@@ -1,0 +1,8 @@
+---
+# Talos v1.14 native document. No administrative or configuration-write roles.
+apiVersion: v1alpha1
+kind: KubeTalosAPIAccessConfig
+allowedRoles:
+  - os:etcd:backup
+allowedKubernetesNamespaces:
+  - platform-backup

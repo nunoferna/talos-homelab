@@ -1,0 +1,40 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: talos-backup
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: talos-backup
+  enableDefaultDeny:
+    ingress: true
+    egress: true
+  # No inbound service. Cilium's policies are additive: audit other policies.
+  ingress: []
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s:k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: '53'
+              protocol: ANY
+          rules:
+            dns:
+              - matchPattern: '*'
+    - toEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: '50000'
+              protocol: TCP
+    - toFQDNs:
+        # Replace with the exact private R2 endpoint before activation.
+        - matchPattern: '*.r2.cloudflarestorage.com'
+      toPorts:
+        - ports:
+            - port: '443'
+              protocol: TCP
