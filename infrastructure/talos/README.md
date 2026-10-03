@@ -58,8 +58,10 @@ GitHub OIDC. Disable the GitHub workflow before removing its RBAC bindings.
 
 The private inventory also supplies explicit `ResolverConfig` nameservers.
 Encrypted upstreams are preferred, with one plain-DNS resolver retained for
-bootstrap if system time is not yet sufficient for TLS validation. DHCP search
-domains are disabled so local suffixes are not sent to public resolvers.
+bootstrap if system time is not yet sufficient for TLS validation. The
+configuration requests suppression of DHCP-provided search domains. Verify the
+live `ResolverStatus` after every rollout because the active DHCP suffix may
+still be reported by Talos.
 
 ## Safe workflow
 
