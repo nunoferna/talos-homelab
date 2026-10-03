@@ -10,6 +10,11 @@ installs checksum-pinned ARM64 builds of the GitHub Actions runner, OpenTofu and
 kubectl. It does not register or start the runner and never handles a GitHub
 registration token.
 
+The role also overrides DHCP-provided DNS on the active NetworkManager
+connection with explicit public resolvers. This prevents the deployment host
+from depending on consumer-router DNS behavior when downloading verified
+providers and contacting GitHub.
+
 ## Prepare the host
 
 Set the operator-local SSH destination and run the playbook:

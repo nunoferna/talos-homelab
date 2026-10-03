@@ -64,6 +64,50 @@
     update_cache: true
     cache_valid_time: 3600
 
+- name: Identify the active NetworkManager connection
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - --get-values
+      - GENERAL.CONNECTION
+      - device
+      - show
+      - "{{ ansible_facts['default_ipv4']['interface'] }}"
+  changed_when: false
+  register: github_actions_runner_network_connection
+
+- name: Read the active connection DNS configuration
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - --terse
+      - --get-values
+      - ipv4.ignore-auto-dns,ipv4.dns,ipv6.ignore-auto-dns
+      - connection
+      - show
+      - "{{ github_actions_runner_network_connection.stdout }}"
+  changed_when: false
+  register: github_actions_runner_dns_configuration
+
+- name: Configure reliable DNS for deployment tooling
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - connection
+      - modify
+      - "{{ github_actions_runner_network_connection.stdout }}"
+      - ipv4.ignore-auto-dns
+      - "yes"
+      - ipv4.dns
+      - "{{ github_actions_runner_dns_servers | join(',') }}"
+      - ipv6.ignore-auto-dns
+      - "yes"
+  when: >-
+    github_actions_runner_dns_configuration.stdout_lines !=
+    ['yes', github_actions_runner_dns_servers | join(','), 'yes']
+  changed_when: true
+  notify: Reapply NetworkManager connection
+
 - name: Create the dedicated runner group
   ansible.builtin.group:
     name: "{{ github_actions_runner_group }}"
