@@ -50,7 +50,7 @@ jobs:
       - name: Check Ansible syntax
         working-directory: management/ansible
         run: |
-          for playbook in discover prepare-artifacts stage activate stop test-proxy runner; do
+          for playbook in discover prepare-artifacts stage activate stop test-proxy runner recovery-tools; do
             ansible-playbook --syntax-check "${playbook}.yaml"
           done
       - name: Compile Python
@@ -84,11 +84,13 @@ jobs:
           tofu -chdir=infrastructure/talos init -backend=false -input=false
           tofu -chdir=infrastructure/cilium init -backend=false -input=false
           tofu -chdir=infrastructure/flux init -backend=false -input=false
+          tofu -chdir=infrastructure/recovery init -backend=false -input=false
       - name: Validate roots
         run: |
           tofu -chdir=infrastructure/talos validate
           tofu -chdir=infrastructure/cilium validate
           tofu -chdir=infrastructure/flux validate
+          tofu -chdir=infrastructure/recovery validate
 
   required:
     name: Static checks

@@ -55,9 +55,13 @@ Backup authentication must not depend on ESO/OpenBao being available.
 1. Record independently accessible age recovery-key custody in two locations.
    Private identities, Talos bootstrap secrets and break-glass credentials stay
    outside Git and outside the privileged deployment runner.
+   Follow the [key-custody ceremony](../../../docs/recovery-key-custody.md);
+   backup recovery and Flux SOPS must use separate identities.
 2. Prepare the R2 bucket, public-access restrictions, retention/lifecycle rules
    and scoped credentials through reviewed code. Never put a bucket-wide lock
    on the live OpenTofu backend or its lock files.
+   The separate [R2 recovery root](../../../infrastructure/recovery/README.md)
+   prepares the destination without managing the existing state bucket.
 3. Measure account usage and ciphertext sizes. The proposed 15-minute interval
    is not an approved retention policy: it creates 96 snapshots/day. Thirty days
    at 10 MB each is 28.8 GB for etcd alone, beyond the R2 free allowance.

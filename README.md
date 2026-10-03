@@ -18,6 +18,8 @@ repository or independently secured storage.
 - `infrastructure/cilium/`: OpenTofu configuration for the Cilium Helm release,
   with an independent encrypted and locked state.
 - `infrastructure/flux/`: OpenTofu-owned day-zero Flux installation.
+- `infrastructure/recovery/`: staged, separately stateful R2 snapshot destination
+  with retention and capacity guards; not applied yet.
 - `clusters/homelab/`: active public Flux reconciliation root.
 - `platform/backup/talos/`: staged upstream encrypted etcd backup configuration;
   not reconciled or scheduled yet. See its [activation runbook](platform/backup/talos/README.md).
@@ -36,9 +38,9 @@ value, and pass its path explicitly at runtime.
 
 ## Validation
 
-The repository pins OpenTofu 1.12.6, the Sidero Labs Talos provider 0.12.0, and
-the HashiCorp Helm provider 3.3.0. Static CI checks scan for committed secrets
-and validate YAML, Ansible, Python, public manifests, and all three OpenTofu roots.
+The repository pins OpenTofu 1.12.6, the Sidero Labs Talos provider 0.12.0,
+HashiCorp Helm provider 3.3.0, and Cloudflare provider 5.24.0. Static CI checks scan for committed secrets
+and validate YAML, Ansible, Python, public manifests, and all four OpenTofu roots.
 
 Run the local checks from the repository root:
 
