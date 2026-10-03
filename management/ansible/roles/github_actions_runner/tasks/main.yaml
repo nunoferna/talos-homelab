@@ -200,6 +200,11 @@
     group: root
     mode: "0755"
 
+- name: Check whether the runner is registered
+  ansible.builtin.stat:
+    path: "{{ github_actions_runner_install_root }}/current/.runner"
+  register: github_actions_runner_registration
+
 - name: Record the intentionally manual registration boundary
   ansible.builtin.copy:
     dest: /etc/homelab-runner-registration-required
@@ -211,6 +216,13 @@
       registered automatically. Register it only with the private
       nunoferna/talos-homelab-gitops repository by following
       docs/rpi-actions-runner.md in the public foundation repository.
+  when: not github_actions_runner_registration.stat.exists
+
+- name: Remove the registration marker after registration
+  ansible.builtin.file:
+    path: /etc/homelab-runner-registration-required
+    state: absent
+  when: github_actions_runner_registration.stat.exists
 
 - name: Verify the pinned OpenTofu runtime
   ansible.builtin.command:
