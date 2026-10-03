@@ -4,6 +4,10 @@ github_actions_runner_user: github-runner
 github_actions_runner_group: github-runner
 github_actions_runner_install_root: /opt/actions-runner
 github_actions_runner_work_directory: /var/lib/github-runner/work
+github_actions_runner_dns_servers:
+  - 1.1.1.1
+  - 8.8.8.8
+  - 9.9.9.9
 
 github_actions_runner_runtime_dependencies_common:
   - ca-certificates
