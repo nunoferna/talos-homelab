@@ -78,3 +78,22 @@ jobs:
         run: |
           tofu -chdir=infrastructure/talos validate
           tofu -chdir=infrastructure/cilium validate
+
+  required:
+    name: Static checks
+    if: always()
+    needs:
+      - secrets
+      - configuration
+      - opentofu
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every validation job to pass
+        env:
+          CONFIGURATION_RESULT: ${{ needs.configuration.result }}
+          OPENTOFU_RESULT: ${{ needs.opentofu.result }}
+          SECRETS_RESULT: ${{ needs.secrets.result }}
+        run: |
+          test "$CONFIGURATION_RESULT" = success
+          test "$OPENTOFU_RESULT" = success
+          test "$SECRETS_RESULT" = success
