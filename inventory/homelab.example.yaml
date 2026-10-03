@@ -7,7 +7,15 @@ homelab:
     subnet: 192.0.2.0
     netmask: 255.255.255.0
     gateway: 192.0.2.254
-    dns: 192.0.2.254
+    dns:
+      - address: 1.1.1.1
+        protocol: DoH
+        tlsServerName: cloudflare-dns.com
+      - address: 8.8.8.8
+        protocol: DoH
+        tlsServerName: dns.google
+      - address: 9.9.9.9
+        protocol: Do53
     kubernetes_vip: 192.0.2.70
   management:
     provisioning_host:
