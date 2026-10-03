@@ -4,8 +4,9 @@ The platform is built in dependency order. A higher layer must not be required
 to recover a lower layer.
 
 1. **Cilium CNI** provides pod networking and policy enforcement.
-2. **Flux** reconciles the private live root and pinned public platform sources,
-   but never owns Cilium.
+2. **Flux** reconciles the public `clusters/homelab` root. A separate
+   authenticated source may later reconcile sensitive resources from the
+   private repository, but Flux never owns Cilium or its own day-zero install.
 3. **Persistent storage** supplies tested failure and snapshot semantics.
 4. **OpenBao** runs as a three-replica integrated-Raft service with TLS,
    anti-affinity, a disruption budget, audit logging, and one persistent volume

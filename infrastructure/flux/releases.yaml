@@ -1,0 +1,10 @@
+---
+repository: oci://ghcr.io/controlplaneio-fluxcd/charts
+operator:
+  chart: flux-operator
+  version: 0.61.0
+  valuesSha256: 65f03a880e6cf352f6a7b8964532d001ce1467d1f34d9e213bedd872eda38b10
+instance:
+  chart: flux-instance
+  version: 0.61.0
+  valuesSha256: 2cbde6172e78402b4ab44699b9fc11ace618b16e7e85ea236b2c50f1dff26831

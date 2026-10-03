@@ -54,7 +54,14 @@ jobs:
             ansible-playbook --syntax-check "${playbook}.yaml"
           done
       - name: Compile Python
-        run: python -m py_compile tests/proxy_dhcp_isolated.py
+        run: >-
+          python -m py_compile
+          tests/proxy_dhcp_isolated.py
+          tests/public_manifests.py
+      - name: Reject plaintext public Secrets
+        run: python tests/public_manifests.py
+      - name: Render the public Flux root
+        run: kubectl kustomize clusters/homelab > /tmp/homelab.yaml
 
   opentofu:
     name: OpenTofu validation
@@ -74,10 +81,12 @@ jobs:
         run: |
           tofu -chdir=infrastructure/talos init -backend=false -input=false
           tofu -chdir=infrastructure/cilium init -backend=false -input=false
+          tofu -chdir=infrastructure/flux init -backend=false -input=false
       - name: Validate roots
         run: |
           tofu -chdir=infrastructure/talos validate
           tofu -chdir=infrastructure/cilium validate
+          tofu -chdir=infrastructure/flux validate
 
   required:
     name: Static checks
