@@ -42,43 +42,367 @@ Do not assume every new age recipient type works with the pinned backup image.
 The backup recipient and SOPS recipient are public; share only these and readiness,
 never a private identity or password-manager export.
 
-## Operator ceremony
+## Operator ceremony: every manual command for this phase
 
-On a trusted recovery workstation with encrypted local storage and no terminal
-recording, use a new private scratch directory outside all repositories. Restrict
-permissions before creating files. The following are native operator custody
-steps, **not commands to run against the cluster or cloud**, and are not executed
-by repository automation:
+These steps cover **workstation tooling and initial key custody only**. They do
+not create an R2 bucket, configure GitHub cloud credentials, inject keys into Flux,
+activate a backup schedule or restore etcd. Those remain separately reviewed
+code-driven operations. Do not run these commands on the Pi or a Talos node.
 
-```sh
-umask 077
-age-keygen -o /PRIVATE/custody/etcd-backup.agekey
-age-keygen -o /PRIVATE/custody/flux-bootstrap.agekey
-age-keygen -y /PRIVATE/custody/etcd-backup.agekey
-age-keygen -y /PRIVATE/custody/flux-bootstrap.agekey
+Use a trusted macOS arm64 workstation with FileVault enabled, no screen/terminal
+recording and no remote session logging. Close any terminal transcript recorder.
+Do not use a synchronized Desktop/Documents folder for private scratch. The
+commands use a fresh directory directly under your user home, outside Git.
+Confirm any backup/sync agent covering your home either encrypts its backups or
+excludes private scratch. FileVault does not encrypt an external Time Machine
+destination. Verify backup encryption in its GUI before generating identities.
+
+Run the numbered sections in order, in the **same terminal session**. The only
+path placeholders to replace are the repository location in step 1 and the USB
+mount path in step 5. Never put a passphrase or private key into a command line,
+shell variable, environment variable, chat, clipboard transcript or Git commit.
+If any command fails, stop; do not skip verification or proceed to cleanup.
+
+### 1. Check the workstation and install tools from reviewed code
+
+First start a clean Bash session. Subsequent blocks assume Bash, not zsh:
+
+```bash
+bash --noprofile --norc
 ```
 
-The scratch paths must be new and on approved encrypted storage. Native generation
-prints only the public recipient; never print or copy private file contents into
-chat. Import each private identity as its own encrypted attachment in the manager.
-Copy the encrypted recovery kit to independently accessible offline media in a
-separate location. Keep unlock instructions/material separate from the locked kit;
-an unavailable manager account or lost workstation must not prevent recovery.
+```bash
+set -euo pipefail
+set +o history
+umask 077
+uname -s
+uname -m
+fdesetup status
+```
 
-For each identity, encrypt a harmless known fixture using the public recipient.
-Verify **both stored copies**, not just the generation-time file: retrieve the
-identity from the manager into fresh approved scratch, decrypt and byte-compare;
-then repeat from the offline kit without relying on the manager or cluster.
-Use the native `age --encrypt --recipient`, `age --decrypt --identity` and `cmp`
-tools. Record the public recipient, test-fixture ciphertext SHA-256, custody
-locations by non-secret labels, test date and result in private recovery records.
-Never record private key contents, unlock material or actual filesystem paths in
-public Git. Remove scratch copies through the workstation's controlled cleanup;
-ordinary deletion is not secure erasure on an unencrypted filesystem.
+Expected: `Darwin`, `arm64`, and `FileVault is On.` Stop if FileVault is off or
+the platform differs. Enabling encryption is a separate workstation-administration
+step; this runbook does not silently change it.
 
-Do not provision the SOPS identity to Flux or the backup recipient to a writer
-until this ceremony has succeeded. Key-generation and custody confirmation cannot
-be substituted by a CI green tick.
+After public PR #5 has been reviewed and merged, update a clean local checkout.
+Replace the example repository path below; do not run `git switch` with unrelated
+uncommitted work. The `test` stops the sequence if the worktree is dirty.
+
+```bash
+recovery_repo_dir='/ABSOLUTE/PATH/TO/talos-homelab'
+cd "$recovery_repo_dir"
+test -z "$(git status --porcelain)"
+git fetch origin main
+git switch main
+git pull --ff-only origin main
+git log -1 --format='%H %s'
+git show HEAD:management/ansible/recovery-tools.yaml
+```
+
+Confirm the displayed commit and playbook are the reviewed version before
+continuing. Provision an isolated Ansible controller environment from the pinned
+repository requirements, then run only the localhost tooling playbook:
+
+```bash
+python3 --version
+test -f management/ansible/recovery-tools.yaml
+if ! test -x .cache/recovery-controller-venv/bin/python; then
+  python3 -m venv .cache/recovery-controller-venv
+fi
+.cache/recovery-controller-venv/bin/python -m pip install --requirement requirements-dev.txt
+recovery_ansible="$recovery_repo_dir/.cache/recovery-controller-venv/bin/ansible-playbook"
+cd "$recovery_repo_dir/management/ansible"
+"$recovery_ansible" -i 'localhost,' --syntax-check recovery-tools.yaml
+"$recovery_ansible" -i 'localhost,' \
+  --extra-vars 'ansible_python_interpreter={{ansible_playbook_python}}' recovery-tools.yaml
+```
+
+This installs public tools through reviewed Ansible code; it neither contacts
+cluster nodes nor generates keys. Python is Ansible's standard controller runtime,
+not a personal backup script. If the pinned requirements reject your Python
+version, stop and provision a supported controller through reviewed workstation
+configuration; do not weaken the pins or install packages system-wide.
+
+Set session-local **tool paths only** and confirm the versions:
+
+```bash
+recovery_tool_root="$HOME/.local/share/homelab-recovery-tools"
+recovery_age="$recovery_tool_root/age-v1.3.1/age/age"
+recovery_age_keygen="$recovery_tool_root/age-v1.3.1/age/age-keygen"
+recovery_sops="$recovery_tool_root/sops-v3.13.3/sops"
+test -x "$recovery_age"
+test -x "$recovery_age_keygen"
+test -x "$recovery_sops"
+"$recovery_age" --version
+"$recovery_sops" --version
+```
+
+Expected age `v1.3.1` and SOPS `3.13.3`. `$HOME` is only read, not reassigned.
+No private identity is added to PATH or the environment.
+
+### 2. Create separate keys and harmless encrypted fixtures
+
+Create new restricted scratch, reject any Git worktree, then generate two
+different classic X25519 identities. Do not add `-pq` for this first integration.
+
+```bash
+recovery_custody_dir="$(mktemp -d "$HOME/.homelab-key-custody.XXXXXX")"
+chmod 700 "$recovery_custody_dir"
+tmutil isexcluded "$recovery_custody_dir"
+if git -C "$recovery_custody_dir" rev-parse --show-toplevel >/dev/null 2>&1; then
+  printf 'STOP: private scratch is inside a Git worktree.\n' >&2
+  exit 1
+fi
+```
+
+`tmutil isexcluded` is read-only. If it reports `[Included]`, confirm the backup
+destination is encrypted **before pasting the key-generation block**. Stop if
+backup/sync confidentiality cannot be established. The same protection must cover
+this directory's manager-check and offline-check subdirectories.
+
+```bash
+"$recovery_age_keygen" -o "$recovery_custody_dir/etcd-backup.agekey"
+"$recovery_age_keygen" -o "$recovery_custody_dir/flux-bootstrap.agekey"
+"$recovery_age_keygen" -y "$recovery_custody_dir/etcd-backup.agekey" \
+  > "$recovery_custody_dir/etcd-backup.recipient.txt"
+"$recovery_age_keygen" -y "$recovery_custody_dir/flux-bootstrap.agekey" \
+  > "$recovery_custody_dir/flux-bootstrap.recipient.txt"
+if cmp -s "$recovery_custody_dir/etcd-backup.recipient.txt" \
+  "$recovery_custody_dir/flux-bootstrap.recipient.txt"; then
+  printf 'STOP: backup and SOPS recipients must differ.\n' >&2
+  exit 1
+fi
+printf 'homelab recovery fixture v1\n' > "$recovery_custody_dir/fixture.txt"
+"$recovery_age" --encrypt \
+  --recipients-file "$recovery_custody_dir/etcd-backup.recipient.txt" \
+  --output "$recovery_custody_dir/etcd.fixture.age" "$recovery_custody_dir/fixture.txt"
+"$recovery_age" --encrypt \
+  --recipients-file "$recovery_custody_dir/flux-bootstrap.recipient.txt" \
+  --output "$recovery_custody_dir/flux.fixture.age" "$recovery_custody_dir/fixture.txt"
+printf 'Private scratch for this ceremony: %s\n' "$recovery_custody_dir"
+```
+
+Generation prints public recipients only. The final path is local operator
+information: do not post it publicly. The plaintext fixture is deliberately not
+sensitive. All output paths are in new scratch; age's `--output` can overwrite
+an existing file, so do not reuse another ceremony's directory or output names.
+
+### 3. Store and retrieve password-manager attachments (GUI)
+
+Use your manager's application, not a full plaintext vault export. If using
+KeePassXC, create/open an encrypted database with independently recoverable unlock
+material. Create two separate entries and attach these exact local files:
+
+- `etcd-backup.agekey` to **Homelab / etcd backup recovery**.
+- `flux-bootstrap.agekey` to **Homelab / Flux SOPS bootstrap**.
+
+Add the corresponding public recipient to each entry's notes. Save and lock the
+manager, reopen it, and verify you can unlock it. Back up the encrypted manager
+database as required by your manager's recovery process; an attachment on the
+same laptop is not an independent recovery copy.
+
+Prepare fresh destinations for attachment retrieval:
+
+```bash
+mkdir -m 700 "$recovery_custody_dir/manager-check"
+printf 'Export individual attachments into: %s\n' "$recovery_custody_dir/manager-check"
+```
+
+In the GUI, export/download **only those two attachments** into that directory,
+with exactly the original filenames. Do not copy the generation-time files into
+`manager-check`: the test must exercise stored/retrieved manager copies. These
+GUI actions have no universal shell command and must not be replaced with a
+command that prints private values.
+
+### 4. Verify both password-manager copies
+
+```bash
+test -f "$recovery_custody_dir/manager-check/etcd-backup.agekey"
+test -f "$recovery_custody_dir/manager-check/flux-bootstrap.agekey"
+chmod 600 "$recovery_custody_dir/manager-check/etcd-backup.agekey" \
+  "$recovery_custody_dir/manager-check/flux-bootstrap.agekey"
+"$recovery_age_keygen" -y "$recovery_custody_dir/manager-check/etcd-backup.agekey" \
+  > "$recovery_custody_dir/manager-check/etcd.recipient.txt"
+"$recovery_age_keygen" -y "$recovery_custody_dir/manager-check/flux-bootstrap.agekey" \
+  > "$recovery_custody_dir/manager-check/flux.recipient.txt"
+cmp "$recovery_custody_dir/etcd-backup.recipient.txt" \
+  "$recovery_custody_dir/manager-check/etcd.recipient.txt"
+cmp "$recovery_custody_dir/flux-bootstrap.recipient.txt" \
+  "$recovery_custody_dir/manager-check/flux.recipient.txt"
+"$recovery_age" --decrypt \
+  --identity "$recovery_custody_dir/manager-check/etcd-backup.agekey" \
+  --output "$recovery_custody_dir/manager-check/etcd.fixture.txt" \
+  "$recovery_custody_dir/etcd.fixture.age"
+"$recovery_age" --decrypt \
+  --identity "$recovery_custody_dir/manager-check/flux-bootstrap.agekey" \
+  --output "$recovery_custody_dir/manager-check/flux.fixture.txt" \
+  "$recovery_custody_dir/flux.fixture.age"
+cmp "$recovery_custody_dir/fixture.txt" "$recovery_custody_dir/manager-check/etcd.fixture.txt"
+cmp "$recovery_custody_dir/fixture.txt" "$recovery_custody_dir/manager-check/flux.fixture.txt"
+printf 'PASS: both password-manager copies recovered their fixtures.\n'
+```
+
+Successful `cmp` is silent; any mismatch/error stops the session. Do not treat
+just opening the manager or seeing a filename as proof of successful recovery.
+
+### 5. Create and copy the offline encrypted kit
+
+Use a **different strong passphrase** to encrypt the offline kit. Enter it only
+at age's interactive terminal prompt, not in a shell command or environment.
+Enter your own independently recorded passphrase rather than accepting age's
+offer to print an auto-generated one. Keep unlock material independently
+accessible, for example in a sealed offline recovery instruction envelope stored
+separately from the USB. A manager-only passphrase creates a circular dependency.
+
+Create a non-secret evidence record and encrypt the archive directly from a
+pipe, without writing a plaintext archive during kit creation:
+
+```bash
+cd "$recovery_custody_dir"
+date -u '+Custody fixture tests: %Y-%m-%dT%H:%M:%SZ' > custody-record.txt
+"$recovery_age" --version >> custody-record.txt
+"$recovery_sops" --version >> custody-record.txt
+printf 'Password-manager recovery: PASS for both identities\n' >> custody-record.txt
+shasum -a 256 etcd.fixture.age flux.fixture.age > fixture-checksums.sha256
+tar -cf - etcd-backup.agekey flux-bootstrap.agekey \
+  etcd-backup.recipient.txt flux-bootstrap.recipient.txt \
+  fixture.txt etcd.fixture.age flux.fixture.age fixture-checksums.sha256 custody-record.txt \
+  | "$recovery_age" --passphrase --output "$recovery_custody_dir/offline-kit.tar.age"
+```
+
+Connect an existing USB with enough free space. **Do not erase, repartition or
+format a drive for these commands.** Replace its mount path below, inspect the
+reported volume, and confirm it is the intended removable device:
+
+```bash
+recovery_usb_dir='/Volumes/REPLACE_WITH_USB_VOLUME'
+test -d "$recovery_usb_dir"
+diskutil info "$recovery_usb_dir"
+```
+
+After confirming the exact device, copy only the encrypted kit, with a new name:
+
+```bash
+recovery_kit_name="homelab-key-custody-$(date -u +%Y%m%dT%H%M%SZ).tar.age"
+test ! -e "$recovery_usb_dir/$recovery_kit_name"
+cp -n "$recovery_custody_dir/offline-kit.tar.age" "$recovery_usb_dir/$recovery_kit_name"
+sync
+cmp "$recovery_custody_dir/offline-kit.tar.age" "$recovery_usb_dir/$recovery_kit_name"
+shasum -a 256 "$recovery_usb_dir/$recovery_kit_name"
+printf 'Encrypted offline kit filename: %s\n' "$recovery_kit_name"
+```
+
+Record the ciphertext checksum and filename privately. Eject the USB in Finder,
+disconnect and reconnect it, then confirm its mount path. This checks the stored
+media rather than relying only on a just-written local copy. Do not place raw
+`.agekey` files or plaintext vault exports on the USB.
+
+### 6. Recover from the USB and verify both offline keys
+
+Enter the offline-kit passphrase when prompted. This must work without using
+the manager, the generation-time identities, the Pi, Kubernetes or GitHub.
+
+```bash
+test -f "$recovery_usb_dir/$recovery_kit_name"
+cmp "$recovery_custody_dir/offline-kit.tar.age" "$recovery_usb_dir/$recovery_kit_name"
+recovery_offline_check_dir="$(mktemp -d "$recovery_custody_dir/offline-check.XXXXXX")"
+chmod 700 "$recovery_offline_check_dir"
+"$recovery_age" --decrypt --output "$recovery_offline_check_dir/kit.tar" \
+  "$recovery_usb_dir/$recovery_kit_name"
+```
+
+Wait for successful decryption and completion of the interactive prompt before
+pasting the next block. Inspect the archive's names and entry types:
+
+```bash
+tar -tvf "$recovery_offline_check_dir/kit.tar"
+```
+
+Inspect the listing before extraction: expect only the nine relative filenames
+listed in step 5, no directories, symlinks, absolute paths or `..` components.
+Stop if anything differs. Extract only that verified self-created kit:
+
+```bash
+tar -xf "$recovery_offline_check_dir/kit.tar" -C "$recovery_offline_check_dir"
+chmod 600 "$recovery_offline_check_dir/etcd-backup.agekey" \
+  "$recovery_offline_check_dir/flux-bootstrap.agekey"
+cd "$recovery_offline_check_dir"
+shasum -a 256 --check fixture-checksums.sha256
+"$recovery_age_keygen" -y etcd-backup.agekey > etcd.derived-recipient.txt
+"$recovery_age_keygen" -y flux-bootstrap.agekey > flux.derived-recipient.txt
+cmp etcd-backup.recipient.txt etcd.derived-recipient.txt
+cmp flux-bootstrap.recipient.txt flux.derived-recipient.txt
+cmp "$recovery_custody_dir/etcd-backup.recipient.txt" etcd.derived-recipient.txt
+cmp "$recovery_custody_dir/flux-bootstrap.recipient.txt" flux.derived-recipient.txt
+"$recovery_age" --decrypt --identity etcd-backup.agekey --output etcd.recovered.txt etcd.fixture.age
+"$recovery_age" --decrypt --identity flux-bootstrap.agekey --output flux.recovered.txt flux.fixture.age
+cmp fixture.txt etcd.recovered.txt
+cmp fixture.txt flux.recovered.txt
+printf 'PASS: both offline copies recovered their fixtures.\n'
+date -u '+Offline recovery passed: %Y-%m-%dT%H:%M:%SZ' \
+  >> "$recovery_custody_dir/custody-record.txt"
+```
+
+For stronger evidence, repeat the offline recovery on a second trusted,
+appropriately provisioned recovery workstation, using the USB, independently held
+unlock material and recorded public recipients. The same-machine test above
+verifies the media and both keys, not loss of the entire primary workstation.
+Store the verified USB in the chosen separate physical location. Keep the final
+evidence record in private recovery records, with non-secret custody labels.
+
+### 7. Share public recipients, then remove temporary private copies
+
+Only these two commands produce values to share with the implementation owner:
+
+```bash
+"$recovery_age_keygen" -y "$recovery_custody_dir/etcd-backup.agekey"
+"$recovery_age_keygen" -y "$recovery_custody_dir/flux-bootstrap.agekey"
+```
+
+Label the first **backup recipient** and the second **SOPS recipient**. Confirm
+both manager-copy tests and both offline-copy tests passed. Never share private
+identities, the offline-kit passphrase, a manager export or a plaintext archive.
+
+**Cleanup gate:** only continue after both independently stored copies have been
+verified and their unlock material/evidence is recoverable. Confirm the scratch
+variables still point to the directories created by this ceremony:
+
+```bash
+printf 'Generation scratch: %s\nOffline scratch: %s\n' \
+  "$recovery_custody_dir" "$recovery_offline_check_dir"
+ls -ld "$recovery_custody_dir" "$recovery_custody_dir/manager-check" "$recovery_offline_check_dir"
+```
+
+The following removes **only seven explicitly named temporary files**, with an
+interactive confirmation for each. They are not moved to Trash and cannot be
+recovered through this runbook; the verified manager/offline copies must remain.
+It does not remove the encrypted kit, public recipients or evidence:
+
+```bash
+rm -i -- "$recovery_custody_dir/etcd-backup.agekey" \
+  "$recovery_custody_dir/flux-bootstrap.agekey" \
+  "$recovery_custody_dir/manager-check/etcd-backup.agekey" \
+  "$recovery_custody_dir/manager-check/flux-bootstrap.agekey" \
+  "$recovery_offline_check_dir/etcd-backup.agekey" \
+  "$recovery_offline_check_dir/flux-bootstrap.agekey" \
+  "$recovery_offline_check_dir/kit.tar"
+```
+
+No recursive removal is needed. File deletion is **not secure erasure**: APFS
+snapshots, backups and storage remanence may retain temporary plaintext copies
+within the encrypted workstation's trust boundary. Keep evidence and encrypted
+kit copies in approved private storage; never commit the scratch directories.
+
+After all interactive removal prompts finish, leave the temporary Bash session:
+
+```bash
+exit
+```
+
+Stop here and return the two public recipients plus custody readiness. Do not
+provision either identity to Flux/the backup writer until the next reviewed phase.
+A harmless fixture test is not proof of etcd backup integrity or restoration,
+and custody confirmation cannot be substituted by a CI green tick.
 
 ## Rotation and disaster readiness
 
