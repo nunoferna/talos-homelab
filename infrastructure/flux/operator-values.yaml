@@ -1,0 +1,14 @@
+---
+installCRDs: true
+
+priorityClassName: system-cluster-critical
+
+rbac:
+  create: true
+  createAggregation: true
+
+reporting:
+  interval: 5m
+
+web:
+  enabled: false

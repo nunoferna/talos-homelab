@@ -14,10 +14,10 @@ Safe to publish after automated and manual review:
 - generic operating procedures with no environment history
 - CI validation and secret scanning
 
-## Public platform repository
+## Public GitOps and foundation repository
 
-The public platform repository is a reusable catalog above the CNI layer, not
-the cluster's Flux entry point. It may contain:
+The public repository is both the reusable foundation and the cluster's Flux
+entry point. Its `clusters/homelab` path may contain:
 
 - pinned Flux `HelmRepository`, `OCIRepository`, and `HelmRelease` resources
 - generic storage, OpenBao, External Secrets Operator, ingress, and
@@ -31,8 +31,9 @@ Publishing Kubernetes YAML does not make it safe automatically. Treat internal
 DNS names, IP ranges, certificate subjects, storage endpoints, tenant names,
 and application metadata as private unless deliberately sanitized.
 
-Cilium is excluded from Flux ownership. The foundation repository owns its
-Helm release through a dedicated OpenTofu root and separate encrypted state.
+Cilium and the day-zero Flux installation are excluded from Flux ownership.
+Dedicated OpenTofu roots own their Helm releases through separate encrypted
+state keys. Flux owns only resources reachable from `clusters/homelab`.
 
 ## Private live repository
 
@@ -40,9 +41,9 @@ Access-controlled and backed up independently:
 
 - real node names, addresses, MAC addresses, disk identifiers, and topology
 - cluster-specific operational history and recovery notes
-- the `clusters/homelab` Flux reconciliation root
-- environment-specific values and references to reviewed public-platform
-  revisions
+- sensitive application manifests and environment-specific values that are not
+  suitable for the public reconciliation root
+- a future authenticated Flux source referencing only reviewed private paths
 - SOPS-encrypted Kubernetes secrets only for approved bootstrap exceptions
 - `.sops.yaml` containing age *recipients* only
 
