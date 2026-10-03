@@ -1,0 +1,119 @@
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: talos-backup
+spec:
+  # Deliberately inactive until the documented activation gates are met.
+  suspend: true
+  schedule: '*/15 * * * *'
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 600
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: talos-backup
+        spec:
+          serviceAccountName: talos-backup
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            runAsNonRoot: true
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: talos-backup
+              # Upstream multi-architecture index inspected 2026-10-03.
+              # No moving tag, shell wrapper, custom image or backup script.
+              image: >-
+                ghcr.io/siderolabs/talos-backup@sha256:7fc186ff37a3137f470082cb609bf1dc3bcece13dd9a6421ec09cfdf4f33ae6c
+              imagePullPolicy: IfNotPresent
+              command:
+                - /talos-backup
+              workingDir: /tmp
+              securityContext:
+                readOnlyRootFilesystem: true
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - ALL
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  cpu: '1'
+                  memory: 1Gi
+              env:
+                - name: DISABLE_ENCRYPTION
+                  value: 'false'
+                - name: ENABLE_COMPRESSION
+                  value: 'true'
+                - name: USE_PATH_STYLE
+                  value: 'true'
+                - name: AWS_REGION
+                  value: auto
+                - name: AWS_EC2_METADATA_DISABLED
+                  value: 'true'
+                - name: CLUSTER_NAME
+                  value: homelab
+                - name: S3_PREFIX
+                  value: etcd
+                - name: CUSTOM_S3_ENDPOINT
+                  valueFrom:
+                    configMapKeyRef:
+                      name: talos-backup-target
+                      key: endpoint
+                - name: BUCKET
+                  valueFrom:
+                    configMapKeyRef:
+                      name: talos-backup-target
+                      key: bucket
+                - name: AGE_RECIPIENT_PUBLIC_KEY
+                  valueFrom:
+                    configMapKeyRef:
+                      name: talos-backup-target
+                      key: age-recipients
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: talos-backup-r2
+                      key: access-key-id
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: talos-backup-r2
+                      key: secret-access-key
+              volumeMounts:
+                - name: scratch
+                  mountPath: /tmp
+                - name: talos-config
+                  mountPath: /.talos
+                - name: talos-identity
+                  mountPath: /var/run/secrets/talos.dev
+                  readOnly: true
+          volumes:
+            # Native snapshots/compression need files; keep plaintext off disk.
+            - name: scratch
+              emptyDir:
+                medium: Memory
+                sizeLimit: 512Mi
+            - name: talos-config
+              emptyDir:
+                medium: Memory
+                sizeLimit: 16Mi
+            - name: talos-identity
+              secret:
+                secretName: talos-backup-identity
+                defaultMode: 288 # 0440, readable by the restricted fsGroup.

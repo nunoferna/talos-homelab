@@ -12,6 +12,11 @@ requires OpenTofu 1.12.6 because state and plan encryption are enforced.
   the one-time bootstrap resource. Never use the Kubernetes VIP.
 - `state_passphrase`: required ephemeral encryption passphrase of at least 32
   characters. Back it up independently and never commit it.
+- `enable_etcd_backup_api_access`: optional, default false. Adds the native
+  Talos API-access document permitting only `os:etcd:backup` identities from
+  `platform-backup`. It renders configuration only, without delivering it to
+  nodes. See the staged [backup runbook](../../platform/backup/talos/README.md)
+  before enabling it; this flag alone does not establish backups.
 
 Relative inventory paths are resolved from the process working directory. An
 absolute path is clearer for operator and CI usage.
