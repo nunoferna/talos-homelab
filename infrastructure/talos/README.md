@@ -56,6 +56,11 @@ does not contain the `KubeAuthenticationConfig`, again one node at a time. The
 administrator client-certificate authentication path remains independent of
 GitHub OIDC. Disable the GitHub workflow before removing its RBAC bindings.
 
+The private inventory also supplies explicit `ResolverConfig` nameservers.
+Encrypted upstreams are preferred, with one plain-DNS resolver retained for
+bootstrap if system time is not yet sufficient for TLS validation. DHCP search
+domains are disabled so local suffixes are not sent to public resolvers.
+
 ## Safe workflow
 
 ```sh

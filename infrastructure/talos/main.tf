@@ -74,6 +74,15 @@ data "talos_machine_configuration" "controlplane" {
         "$patch" = "delete"
       }
     }),
+    yamlencode({
+      apiVersion  = "v1alpha1"
+      kind        = "ResolverConfig"
+      nameservers = local.inventory.network.dns
+      searchDomains = {
+        domains        = []
+        disableDefault = true
+      }
+    }),
     # Cilium owns pod networking and service load-balancing. These documents
     # match the Talos v1.14 no-kube-proxy Cilium configuration.
     yamlencode({
