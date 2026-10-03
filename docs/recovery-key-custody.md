@@ -17,13 +17,25 @@ Other recovery platforms need their own reviewed artifact/checksum entries.
 
 ## Practical single-operator design
 
-Use a dedicated native age backup identity stored as an encrypted password-manager
-attachment, plus an offline encrypted recovery kit kept in a separate physical
-location. An existing trustworthy manager is preferable to adding another service.
-If none exists, KeePassXC provides an offline encrypted database without a cloud
-subscription. Its encrypted database/attachments must themselves be backed up;
-the unlock passphrase and any key file must be recoverable independently of the
-primary computer, cluster and manager account. Avoid circular recovery dependencies.
+Use two different native age identities inside a passphrase-encrypted recovery
+bundle. Keep one durable encrypted copy on the FileVault-protected workstation
+and another in a private OneDrive folder. Store the bundle passphrase in macOS
+Keychain Access for routine use, with an independently accessible sealed paper
+copy. No USB, paid password manager, OneDrive desktop sync client or cloud API
+token is required. Upload only ciphertext through the OneDrive website.
+
+Keychain holds the **bundle passphrase**, not the raw age keys or file attachments.
+Do not assume a local login-keychain item is synchronized to iCloud or recoverable
+on another device. OneDrive access and MFA must remain recoverable without this
+Mac, Apple account, cluster, Pi, GitHub or Cloudflare account. Account credentials
+and recovery codes must not exist only in Keychain, OneDrive or the encrypted
+bundle they unlock. Avoid circular recovery dependencies.
+
+This replaces an offline media copy with an off-site online copy. It depends on
+Microsoft account access and service availability; it is not air-gapped, immutable
+storage or an enterprise managed vault. Independent custody and tested recovery
+are the relevant controls for this single-operator setup. Keep within existing
+OneDrive capacity; do not purchase a plan or rely on paid vault features.
 
 Two copies at different locations are not two-person control. This is a practical
 single-operator baseline, not a claim of enterprise separation of duties. Later,
@@ -32,9 +44,9 @@ when people/budget exist. Do not invent secret-sharing cryptography for age keys
 
 | Identity | Runtime location | Independent recovery custody |
 | --- | --- | --- |
-| etcd backup age key | Public recipient only in GitOps/pod; private key never online in cluster/runner | Password manager plus offline encrypted kit |
+| etcd backup age key | Public recipient only in GitOps/pod; private key never online in cluster/runner | Encrypted local and OneDrive bundles; Keychain plus independent paper unlock |
 | SOPS bootstrap age key | Private identity in Flux decryption Secret; public recipient in private `.sops.yaml` | Same custody model, **different key** |
-| OpenTofu state passphrase | Protected deployment runtime, not application pods | Separate manager entry plus recovery kit |
+| OpenTofu state passphrase | Protected deployment runtime, not application pods | Separate Keychain entry plus independently held recovery copy; not added by this ceremony |
 | OpenBao unseal shares | Later, outside OpenBao, Git and the backup writer | Separate named custody; no dependency on ESO |
 
 Use a dedicated **X25519** age identity for the first upstream Talos integration.
@@ -58,12 +70,19 @@ excludes private scratch. FileVault does not encrypt an external Time Machine
 destination. Verify backup encryption in its GUI before generating identities.
 
 Run the numbered sections in order, in the **same terminal session**. The only
-path placeholders to replace are the repository location in step 1 and the USB
-mount path in step 5. Never put a passphrase or private key into a command line,
+path placeholder to replace is the repository location in step 1. Never put a
+passphrase or private key into a command line,
 shell variable, environment variable, chat, clipboard transcript or Git commit.
 If any command fails, stop; do not skip verification or proceed to cleanup.
 
 ### 1. Check the workstation and install tools from reviewed code
+
+**Assisted hand-off:** if the reviewed tools are already installed, only run the
+clean-shell/workstation checks and the tool-path/version block in this section.
+Then complete steps 2–7 yourself: account readiness, key generation, Keychain and
+paper custody, interactive encryption/decryption, OneDrive upload/download and
+fixture verification. No production private key or passphrase needs to enter
+chat. Tool installation is not a reason to repeat key generation.
 
 First start a clean Bash session. Subsequent blocks assume Bash, not zsh:
 
@@ -84,7 +103,8 @@ Expected: `Darwin`, `arm64`, and `FileVault is On.` Stop if FileVault is off or
 the platform differs. Enabling encryption is a separate workstation-administration
 step; this runbook does not silently change it.
 
-After public PR #5 has been reviewed and merged, update a clean local checkout.
+After the tooling and this custody runbook have been reviewed and merged, update
+a clean local checkout.
 Replace the example repository path below; do not run `git switch` with unrelated
 uncommitted work. The `test` stops the sequence if the worktree is dirty.
 
@@ -140,7 +160,23 @@ test -x "$recovery_sops"
 Expected age `v1.3.1` and SOPS `3.13.3`. `$HOME` is only read, not reassigned.
 No private identity is added to PATH or the environment.
 
+If this tooling was already provisioned from reviewed code, do not reinstall it:
+start the clean Bash session, set the tool paths above, verify the versions and
+continue. The assistant may handle checkout/tool validation, but not production
+key generation, passphrase access or cloud-account sign-in.
+
 ### 2. Create separate keys and harmless encrypted fixtures
+
+**Operator-only preflight, before generating keys:** sign in to the intended
+OneDrive account, confirm enough existing capacity, MFA and a recovery route
+independent of this Mac. Use a private, unshared folder that is not tied to the
+cluster or Cloudflare account. For a personal Microsoft account, retain an account
+recovery code separately; creating a new code invalidates the previous one.
+Microsoft documents possible 30-day delays when replacing security information,
+so an existing second sign-in method matters for timely recovery. For a managed
+work/school account, confirm the organization's recovery process instead; do not
+assume the personal-account recovery-code procedure applies. Stop if these
+dependencies are unresolved. Do not share any credentials or recovery codes here.
 
 Create new restricted scratch, reject any Git worktree, then generate two
 different classic X25519 identities. Do not add `-pq` for this first integration.
@@ -158,7 +194,7 @@ fi
 `tmutil isexcluded` is read-only. If it reports `[Included]`, confirm the backup
 destination is encrypted **before pasting the key-generation block**. Stop if
 backup/sync confidentiality cannot be established. The same protection must cover
-this directory's manager-check and offline-check subdirectories.
+this directory's local-check and cloud-check subdirectories.
 
 ```bash
 "$recovery_age_keygen" -o "$recovery_custody_dir/etcd-backup.agekey"
@@ -187,146 +223,181 @@ information: do not post it publicly. The plaintext fixture is deliberately not
 sensitive. All output paths are in new scratch; age's `--output` can overwrite
 an existing file, so do not reuse another ceremony's directory or output names.
 
-### 3. Store and retrieve password-manager attachments (GUI)
+### 3. Establish Keychain and independent passphrase custody (GUI)
 
-Use your manager's application, not a full plaintext vault export. If using
-KeePassXC, create/open an encrypted database with independently recoverable unlock
-material. Create two separate entries and attach these exact local files:
+This section is operator-only. Open Keychain Access through Spotlight, select
+the login keychain and create a new password item (Command-N or the corresponding
+menu item). Use a non-secret name such as "Homelab recovery bundle / v1" and
+account label "homelab-recovery". Do not replace an existing entry.
 
-- `etcd-backup.agekey` to **Homelab / etcd backup recovery**.
-- `flux-bootstrap.agekey` to **Homelab / Flux SOPS bootstrap**.
+Use the built-in Password Assistant, if available, to choose a long random
+password (at least 24 random alphanumeric characters), or use a trustworthy
+generator to choose at least six independently random words. Do not invent a
+memorable phrase or reuse your Mac, Microsoft, GitHub, R2 or state password.
+Keep generation and entry entirely in the local GUI; do not send it to the
+assistant, screenshots, terminal output or shell history. Avoid clipboard
+managers; manually type into age's interactive prompt.
 
-Add the corresponding public recipient to each entry's notes. Save and lock the
-manager, reopen it, and verify you can unlock it. Back up the encrypted manager
-database as required by your manager's recovery process; an attachment on the
-same laptop is not an independent recovery copy.
+Save the item, close it, reopen it and authenticate to retrieve the password.
+Privately record the identical passphrase in a sealed paper recovery record
+stored separately from the Mac. Include the bundle version, cloud account/folder
+locator and recovery instructions, but never put the passphrase in OneDrive or
+inside the bundle. Keep the cloud account's recovery material independently
+accessible too. Paper is the simple independent unlock copy, not a USB; if it
+is unsuitable, stop and agree an independently controlled custodian before
+proceeding. Memorization or Keychain alone is not the selected recovery model.
 
-Prepare fresh destinations for attachment retrieval:
+No shell command is needed to store or retrieve this secret. Do not substitute
+a "security ... -w" command, export the keychain, or grant unattended applications
+access merely for this ceremony. A login-keychain item need not appear in the
+Passwords app; this runbook uses Keychain Access explicitly.
 
-```bash
-mkdir -m 700 "$recovery_custody_dir/manager-check"
-printf 'Export individual attachments into: %s\n' "$recovery_custody_dir/manager-check"
-```
+### 4. Encrypt, retain and verify the local bundle
 
-In the GUI, export/download **only those two attachments** into that directory,
-with exactly the original filenames. Do not copy the generation-time files into
-`manager-check`: the test must exercise stored/retrieved manager copies. These
-GUI actions have no universal shell command and must not be replaced with a
-command that prints private values.
-
-### 4. Verify both password-manager copies
-
-```bash
-test -f "$recovery_custody_dir/manager-check/etcd-backup.agekey"
-test -f "$recovery_custody_dir/manager-check/flux-bootstrap.agekey"
-chmod 600 "$recovery_custody_dir/manager-check/etcd-backup.agekey" \
-  "$recovery_custody_dir/manager-check/flux-bootstrap.agekey"
-"$recovery_age_keygen" -y "$recovery_custody_dir/manager-check/etcd-backup.agekey" \
-  > "$recovery_custody_dir/manager-check/etcd.recipient.txt"
-"$recovery_age_keygen" -y "$recovery_custody_dir/manager-check/flux-bootstrap.agekey" \
-  > "$recovery_custody_dir/manager-check/flux.recipient.txt"
-cmp "$recovery_custody_dir/etcd-backup.recipient.txt" \
-  "$recovery_custody_dir/manager-check/etcd.recipient.txt"
-cmp "$recovery_custody_dir/flux-bootstrap.recipient.txt" \
-  "$recovery_custody_dir/manager-check/flux.recipient.txt"
-"$recovery_age" --decrypt \
-  --identity "$recovery_custody_dir/manager-check/etcd-backup.agekey" \
-  --output "$recovery_custody_dir/manager-check/etcd.fixture.txt" \
-  "$recovery_custody_dir/etcd.fixture.age"
-"$recovery_age" --decrypt \
-  --identity "$recovery_custody_dir/manager-check/flux-bootstrap.agekey" \
-  --output "$recovery_custody_dir/manager-check/flux.fixture.txt" \
-  "$recovery_custody_dir/flux.fixture.age"
-cmp "$recovery_custody_dir/fixture.txt" "$recovery_custody_dir/manager-check/etcd.fixture.txt"
-cmp "$recovery_custody_dir/fixture.txt" "$recovery_custody_dir/manager-check/flux.fixture.txt"
-printf 'PASS: both password-manager copies recovered their fixtures.\n'
-```
-
-Successful `cmp` is silent; any mismatch/error stops the session. Do not treat
-just opening the manager or seeing a filename as proof of successful recovery.
-
-### 5. Create and copy the offline encrypted kit
-
-Use a **different strong passphrase** to encrypt the offline kit. Enter it only
-at age's interactive terminal prompt, not in a shell command or environment.
-Enter your own independently recorded passphrase rather than accepting age's
-offer to print an auto-generated one. Keep unlock material independently
-accessible, for example in a sealed offline recovery instruction envelope stored
-separately from the USB. A manager-only passphrase creates a circular dependency.
-
-Create a non-secret evidence record and encrypt the archive directly from a
-pipe, without writing a plaintext archive during kit creation:
+The following creates an encrypted bundle directly from a pipe, without writing
+a plaintext archive during creation. Enter the passphrase established in step 3
+at age's interactive prompt and confirm it. Do not press Enter to accept an
+offer to print an automatically generated passphrase.
 
 ```bash
 cd "$recovery_custody_dir"
-date -u '+Custody fixture tests: %Y-%m-%dT%H:%M:%SZ' > custody-record.txt
+date -u '+Bundle created: %Y-%m-%dT%H:%M:%SZ' > custody-record.txt
 "$recovery_age" --version >> custody-record.txt
 "$recovery_sops" --version >> custody-record.txt
-printf 'Password-manager recovery: PASS for both identities\n' >> custody-record.txt
+printf 'Custody: encrypted local + OneDrive; Keychain + independent paper unlock\n' >> custody-record.txt
+printf 'Fixture verification pending; final results retained separately\n' >> custody-record.txt
 shasum -a 256 etcd.fixture.age flux.fixture.age > fixture-checksums.sha256
+recovery_kit_name="homelab-key-custody-$(date -u +%Y%m%dT%H%M%SZ).tar.age"
+test ! -e "$recovery_custody_dir/$recovery_kit_name"
 tar -cf - etcd-backup.agekey flux-bootstrap.agekey \
   etcd-backup.recipient.txt flux-bootstrap.recipient.txt \
   fixture.txt etcd.fixture.age flux.fixture.age fixture-checksums.sha256 custody-record.txt \
-  | "$recovery_age" --passphrase --output "$recovery_custody_dir/offline-kit.tar.age"
+  | "$recovery_age" --passphrase --output "$recovery_custody_dir/$recovery_kit_name"
 ```
 
-Connect an existing USB with enough free space. **Do not erase, repartition or
-format a drive for these commands.** Replace its mount path below, inspect the
-reported volume, and confirm it is the intended removable device:
+Wait for the interactive prompt to finish successfully before pasting the next
+block. Retain a durable encrypted local copy outside Git and cloud-sync folders:
 
 ```bash
-recovery_usb_dir='/Volumes/REPLACE_WITH_USB_VOLUME'
-test -d "$recovery_usb_dir"
-diskutil info "$recovery_usb_dir"
+recovery_local_store="$HOME/.local/share/homelab-recovery-custody"
+if test -L "$recovery_local_store"; then
+  printf 'STOP: local custody directory is a symlink.\n' >&2
+  exit 1
+fi
+mkdir -p -m 700 "$recovery_local_store"
+chmod 700 "$recovery_local_store"
+if git -C "$recovery_local_store" rev-parse --show-toplevel >/dev/null 2>&1; then
+  printf 'STOP: local custody directory is inside a Git worktree.\n' >&2
+  exit 1
+fi
+test ! -e "$recovery_local_store/$recovery_kit_name"
+cp -n "$recovery_custody_dir/$recovery_kit_name" "$recovery_local_store/$recovery_kit_name"
+chmod 600 "$recovery_local_store/$recovery_kit_name"
+cmp "$recovery_custody_dir/$recovery_kit_name" "$recovery_local_store/$recovery_kit_name"
+shasum -a 256 "$recovery_local_store/$recovery_kit_name"
+printf 'Retained encrypted bundle: %s/%s\n' "$recovery_local_store" "$recovery_kit_name"
+recovery_local_check_dir="$(mktemp -d "$recovery_custody_dir/local-check.XXXXXX")"
+chmod 700 "$recovery_local_check_dir"
+"$recovery_age" --decrypt --output "$recovery_local_check_dir/kit.tar" \
+  "$recovery_local_store/$recovery_kit_name"
 ```
 
-After confirming the exact device, copy only the encrypted kit, with a new name:
+For this local test, retrieve the saved passphrase through Keychain Access and
+type it manually at age's prompt. Wait for successful decryption, then inspect:
 
 ```bash
-recovery_kit_name="homelab-key-custody-$(date -u +%Y%m%dT%H%M%SZ).tar.age"
-test ! -e "$recovery_usb_dir/$recovery_kit_name"
-cp -n "$recovery_custody_dir/offline-kit.tar.age" "$recovery_usb_dir/$recovery_kit_name"
-sync
-cmp "$recovery_custody_dir/offline-kit.tar.age" "$recovery_usb_dir/$recovery_kit_name"
-shasum -a 256 "$recovery_usb_dir/$recovery_kit_name"
-printf 'Encrypted offline kit filename: %s\n' "$recovery_kit_name"
+tar -tvf "$recovery_local_check_dir/kit.tar"
 ```
 
-Record the ciphertext checksum and filename privately. Eject the USB in Finder,
-disconnect and reconnect it, then confirm its mount path. This checks the stored
-media rather than relying only on a just-written local copy. Do not place raw
-`.agekey` files or plaintext vault exports on the USB.
-
-### 6. Recover from the USB and verify both offline keys
-
-Enter the offline-kit passphrase when prompted. This must work without using
-the manager, the generation-time identities, the Pi, Kubernetes or GitHub.
+Expect only the nine regular files listed in the archive-creation command,
+with relative names, no directories, symlinks, absolute paths or ".." components.
+Stop if anything differs. Extract only this verified self-created archive:
 
 ```bash
-test -f "$recovery_usb_dir/$recovery_kit_name"
-cmp "$recovery_custody_dir/offline-kit.tar.age" "$recovery_usb_dir/$recovery_kit_name"
-recovery_offline_check_dir="$(mktemp -d "$recovery_custody_dir/offline-check.XXXXXX")"
-chmod 700 "$recovery_offline_check_dir"
-"$recovery_age" --decrypt --output "$recovery_offline_check_dir/kit.tar" \
-  "$recovery_usb_dir/$recovery_kit_name"
+tar -xf "$recovery_local_check_dir/kit.tar" -C "$recovery_local_check_dir"
+chmod 600 "$recovery_local_check_dir/etcd-backup.agekey" \
+  "$recovery_local_check_dir/flux-bootstrap.agekey"
+cd "$recovery_local_check_dir"
+shasum -a 256 --check fixture-checksums.sha256
+"$recovery_age_keygen" -y etcd-backup.agekey > etcd.derived-recipient.txt
+"$recovery_age_keygen" -y flux-bootstrap.agekey > flux.derived-recipient.txt
+cmp "$recovery_custody_dir/etcd-backup.recipient.txt" etcd.derived-recipient.txt
+cmp "$recovery_custody_dir/flux-bootstrap.recipient.txt" flux.derived-recipient.txt
+"$recovery_age" --decrypt --identity etcd-backup.agekey --output etcd.recovered.txt etcd.fixture.age
+"$recovery_age" --decrypt --identity flux-bootstrap.agekey --output flux.recovered.txt flux.fixture.age
+cmp "$recovery_custody_dir/fixture.txt" etcd.recovered.txt
+cmp "$recovery_custody_dir/fixture.txt" flux.recovered.txt
+date -u '+Local bundle + Keychain fixture recovery passed: %Y-%m-%dT%H:%M:%SZ' \
+  >> "$recovery_custody_dir/custody-record.txt"
+printf 'PASS: retained local bundle recovered both fixtures using Keychain unlock.\n'
 ```
 
-Wait for successful decryption and completion of the interactive prompt before
-pasting the next block. Inspect the archive's names and entry types:
+Successful comparisons are silent. A filename, successful upload or accessible
+Keychain entry alone does not establish key recovery.
+
+### 5. Upload to OneDrive and download a fresh stored copy (GUI)
+
+Use the OneDrive website and the existing account checked in step 2. No desktop
+sync setup or application/API credentials are needed.
+
+1. Create or open a private, unshared folder such as "Homelab Recovery".
+2. Choose "Add new > Files upload" (or "Upload", depending on the UI).
+3. Select **only** the encrypted bundle at the local path printed in step 4.
+   Do not upload the scratch folder, raw ".agekey" files, plaintext archives,
+   Keychain exports, passphrase or account recovery codes.
+4. Wait for completion; verify the unique filename and that no sharing links
+   or unintended folder permissions exist. Do not replace older bundles.
+5. Sign out. In a fresh private browser session, sign in using the independently
+   available account credentials and MFA, without relying on this Mac's saved
+   login. Do not reset the account or consume recovery codes as a routine test.
+   Record recovery readiness without exposing credentials.
+
+Prepare an empty download destination inside protected scratch:
 
 ```bash
-tar -tvf "$recovery_offline_check_dir/kit.tar"
+recovery_cloud_check_dir="$(mktemp -d "$recovery_custody_dir/cloud-check.XXXXXX")"
+chmod 700 "$recovery_cloud_check_dir"
+printf 'Download the OneDrive bundle into: %s\n' "$recovery_cloud_check_dir"
+printf 'Required filename: %s\n' "$recovery_kit_name"
 ```
 
-Inspect the listing before extraction: expect only the nine relative filenames
-listed in step 5, no directories, symlinks, absolute paths or `..` components.
-Stop if anything differs. Extract only that verified self-created kit:
+In that fresh OneDrive session, select the uploaded file and choose Download.
+Save the single encrypted file into the printed directory with its exact
+original filename. If the browser first saves to Downloads, move **that downloaded
+ciphertext** using Finder into the empty destination. Do not copy the original
+local file or use a sync cache: this must test a real cloud download. Wait for
+completion before continuing.
+
+### 6. Recover the cloud copy using independent unlock material
+
+Use the independently held paper passphrase for this test, **not Keychain**.
+No generation-time identity, Pi, Kubernetes, GitHub or Cloudflare access may be
+used. Check the actual downloaded ciphertext before decrypting:
 
 ```bash
-tar -xf "$recovery_offline_check_dir/kit.tar" -C "$recovery_offline_check_dir"
-chmod 600 "$recovery_offline_check_dir/etcd-backup.agekey" \
-  "$recovery_offline_check_dir/flux-bootstrap.agekey"
-cd "$recovery_offline_check_dir"
+test -f "$recovery_cloud_check_dir/$recovery_kit_name"
+test ! -L "$recovery_cloud_check_dir/$recovery_kit_name"
+cmp "$recovery_local_store/$recovery_kit_name" \
+  "$recovery_cloud_check_dir/$recovery_kit_name"
+shasum -a 256 "$recovery_cloud_check_dir/$recovery_kit_name"
+"$recovery_age" --decrypt --output "$recovery_cloud_check_dir/kit.tar" \
+  "$recovery_cloud_check_dir/$recovery_kit_name"
+```
+
+Wait for successful decryption and completion of the prompt. Inspect before
+extraction, applying the same nine-regular-file checks from step 4:
+
+```bash
+tar -tvf "$recovery_cloud_check_dir/kit.tar"
+```
+
+Only after verifying the listing:
+
+```bash
+tar -xf "$recovery_cloud_check_dir/kit.tar" -C "$recovery_cloud_check_dir"
+chmod 600 "$recovery_cloud_check_dir/etcd-backup.agekey" \
+  "$recovery_cloud_check_dir/flux-bootstrap.agekey"
+cd "$recovery_cloud_check_dir"
 shasum -a 256 --check fixture-checksums.sha256
 "$recovery_age_keygen" -y etcd-backup.agekey > etcd.derived-recipient.txt
 "$recovery_age_keygen" -y flux-bootstrap.agekey > flux.derived-recipient.txt
@@ -338,17 +409,21 @@ cmp "$recovery_custody_dir/flux-bootstrap.recipient.txt" flux.derived-recipient.
 "$recovery_age" --decrypt --identity flux-bootstrap.agekey --output flux.recovered.txt flux.fixture.age
 cmp fixture.txt etcd.recovered.txt
 cmp fixture.txt flux.recovered.txt
-printf 'PASS: both offline copies recovered their fixtures.\n'
-date -u '+Offline recovery passed: %Y-%m-%dT%H:%M:%SZ' \
+date -u '+OneDrive download + independent unlock fixture recovery passed: %Y-%m-%dT%H:%M:%SZ' \
   >> "$recovery_custody_dir/custody-record.txt"
+printf 'PASS: downloaded OneDrive bundle recovered both fixtures with independent unlock.\n'
 ```
 
-For stronger evidence, repeat the offline recovery on a second trusted,
-appropriately provisioned recovery workstation, using the USB, independently held
-unlock material and recorded public recipients. The same-machine test above
-verifies the media and both keys, not loss of the entire primary workstation.
-Store the verified USB in the chosen separate physical location. Keep the final
-evidence record in private recovery records, with non-secret custody labels.
+Record the bundle's filename, ciphertext checksum, public recipients, OneDrive
+account/folder locator, Keychain label and test dates in **private** recovery
+records. The record inside the immutable bundle says verification was pending at
+creation; retain the completed record separately. Do not put passwords or account
+recovery codes in this evidence.
+
+For stronger evidence, repeat the cloud recovery on a second trusted workstation,
+using independently accessible account authentication, paper unlock and recorded
+public recipients. The same-machine test verifies retrieval and both keys, not
+actual loss of the Mac. Do not claim a full disaster drill until that test occurs.
 
 ### 7. Share public recipients, then remove temporary private copies
 
@@ -360,49 +435,54 @@ Only these two commands produce values to share with the implementation owner:
 ```
 
 Label the first **backup recipient** and the second **SOPS recipient**. Confirm
-both manager-copy tests and both offline-copy tests passed. Never share private
-identities, the offline-kit passphrase, a manager export or a plaintext archive.
+both local-copy fixtures and both downloaded-cloud-copy fixtures passed, with
+independently accessible unlock/account recovery. Never share private identities,
+the bundle passphrase, account recovery codes or a plaintext archive.
 
-**Cleanup gate:** only continue after both independently stored copies have been
-verified and their unlock material/evidence is recoverable. Confirm the scratch
-variables still point to the directories created by this ceremony:
+**Cleanup gate:** only continue after both retained encrypted copies have been
+verified and the independent unlock/evidence is accessible. Confirm the exact
+scratch paths and keep the final non-secret evidence beside the local ciphertext:
 
 ```bash
-printf 'Generation scratch: %s\nOffline scratch: %s\n' \
-  "$recovery_custody_dir" "$recovery_offline_check_dir"
-ls -ld "$recovery_custody_dir" "$recovery_custody_dir/manager-check" "$recovery_offline_check_dir"
+printf 'Generation scratch: %s\nLocal test scratch: %s\nCloud test scratch: %s\n' \
+  "$recovery_custody_dir" "$recovery_local_check_dir" "$recovery_cloud_check_dir"
+ls -ld "$recovery_custody_dir" "$recovery_local_check_dir" "$recovery_cloud_check_dir"
+test -f "$recovery_local_store/$recovery_kit_name"
+test ! -e "$recovery_local_store/$recovery_kit_name.custody-record.txt"
+cp -n "$recovery_custody_dir/custody-record.txt" \
+  "$recovery_local_store/$recovery_kit_name.custody-record.txt"
 ```
 
-The following removes **only seven explicitly named temporary files**, with an
-interactive confirmation for each. They are not moved to Trash and cannot be
-recovered through this runbook; the verified manager/offline copies must remain.
-It does not remove the encrypted kit, public recipients or evidence:
+The following removes **only eight explicitly named temporary private files**,
+with confirmation for each. They are not moved to Trash and cannot be recovered
+through this runbook; retain the verified local/OneDrive encrypted bundles.
+It does not remove encrypted files, public recipients, harmless fixtures or evidence:
 
 ```bash
 rm -i -- "$recovery_custody_dir/etcd-backup.agekey" \
   "$recovery_custody_dir/flux-bootstrap.agekey" \
-  "$recovery_custody_dir/manager-check/etcd-backup.agekey" \
-  "$recovery_custody_dir/manager-check/flux-bootstrap.agekey" \
-  "$recovery_offline_check_dir/etcd-backup.agekey" \
-  "$recovery_offline_check_dir/flux-bootstrap.agekey" \
-  "$recovery_offline_check_dir/kit.tar"
+  "$recovery_local_check_dir/etcd-backup.agekey" \
+  "$recovery_local_check_dir/flux-bootstrap.agekey" \
+  "$recovery_local_check_dir/kit.tar" \
+  "$recovery_cloud_check_dir/etcd-backup.agekey" \
+  "$recovery_cloud_check_dir/flux-bootstrap.agekey" \
+  "$recovery_cloud_check_dir/kit.tar"
 ```
 
-No recursive removal is needed. File deletion is **not secure erasure**: APFS
-snapshots, backups and storage remanence may retain temporary plaintext copies
-within the encrypted workstation's trust boundary. Keep evidence and encrypted
-kit copies in approved private storage; never commit the scratch directories.
+No recursive removal is needed. Deletion is **not secure erasure**: APFS snapshots,
+backups and storage remanence may retain temporary plaintext within the encrypted
+workstation boundary. Never commit scratch, evidence/account locators or bundles.
+No production key work or deletion in this section is delegated to the assistant.
 
-After all interactive removal prompts finish, leave the temporary Bash session:
+After all interactive prompts finish, leave the temporary Bash session:
 
 ```bash
 exit
 ```
 
-Stop here and return the two public recipients plus custody readiness. Do not
-provision either identity to Flux/the backup writer until the next reviewed phase.
-A harmless fixture test is not proof of etcd backup integrity or restoration,
-and custody confirmation cannot be substituted by a CI green tick.
+Stop here and return only the two public recipients plus custody readiness.
+Do not provision either identity to Flux/the backup writer until the next reviewed
+phase. This ceremony verifies key custody, not etcd snapshot integrity or restore.
 
 ## Rotation and disaster readiness
 
@@ -416,10 +496,16 @@ files through a reviewed private commit. Confirm the new Flux key can decrypt
 before removing the old online identity. Never reuse the backup recovery identity
 as the Flux key simply to reduce the number of entries.
 
-Quarterly, and after rotation, exercise recovery from the offline kit with a
-harmless fixture. A real etcd download/decryption/integrity check remains a later
-gate; an isolated restore drill remains separate from the production cluster.
+Quarterly, and after rotation, download the retained OneDrive bundle and exercise
+recovery with independent unlock material and a harmless fixture. Check account
+access, MFA/recovery readiness, capacity and folder permissions too. Retain old
+bundles and passphrases while older backups or SOPS files still require them.
+Use unique versioned filenames; cloud sync, version history and recycle bins are
+not substitutes for verified key custody. A real etcd download/decryption/integrity
+check remains a later gate; an isolated restore drill is separate from production.
 
 Sources: [native age usage](https://github.com/FiloSottile/age),
 [Flux age/SOPS integration](https://fluxcd.io/flux/guides/mozilla-sops/),
-[KeePassXC encrypted attachments and backups](https://keepassxc.org/docs/KeePassXC_UserGuide).
+[Apple Keychain Access password-item shortcut](https://support.apple.com/guide/keychain-access/keyboard-shortcuts-kyca699a9058/mac),
+[OneDrive browser upload](https://support.microsoft.com/en-gb/onedrive/upload-and-save-files-and-folders-to-onedrive),
+[Microsoft account recovery codes and waiting periods](https://support.microsoft.com/en-us/accounts-billing/manage/how-to-get-a-microsoft-account-recovery-code).
