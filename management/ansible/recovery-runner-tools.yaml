@@ -1,0 +1,43 @@
+---
+- name: Prepare native R2 state-transfer tooling without changing runner registration
+  hosts: provisioning
+  gather_facts: true
+  become: true
+  tasks:
+    - name: Require the supported recovery runner OS
+      ansible.builtin.assert:
+        that:
+          - ansible_host | length > 0
+          - ansible_user | length > 0
+          - ansible_facts['distribution'] == 'Debian'
+          - ansible_facts['distribution_major_version'] == '13'
+          - ansible_facts['architecture'] == 'aarch64'
+
+    - name: Install Debian-maintained AWS CLI through the signed OS package repository
+      # Native vendor CLI, not a custom state transport or backup implementation.
+      ansible.builtin.apt:
+        name: awscli
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Read the native AWS CLI version
+      ansible.builtin.command:
+        argv: [aws, --version]
+      changed_when: false
+      register: recovery_aws_version
+      when: not ansible_check_mode
+
+    - name: Keep emergency encrypted state outside checkout and runner temporary cleanup
+      ansible.builtin.file:
+        path: /var/lib/github-runner/recovery-incidents
+        state: directory
+        owner: github-runner
+        group: github-runner
+        mode: '0700'
+
+    - name: Require AWS CLI v2
+      ansible.builtin.assert:
+        that:
+          - recovery_aws_version.stdout.startswith('aws-cli/2.')
+      when: not ansible_check_mode

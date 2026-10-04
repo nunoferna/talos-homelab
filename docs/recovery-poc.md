@@ -15,7 +15,8 @@ Private key material and passphrases must remain outside Git, CI and the Pi.
   for a new private Standard R2 bucket and seven-day prefix lock/expiry. It uses
   encrypted state and saved plans under `homelab/recovery.tfstate`, never changes
   the state bucket, and defaults to `backup_mode=poc`, `snapshots_per_day=0` and
-  a 100,000,000-byte planning budget. There is no apply operation yet.
+  a 100,000,000-byte planning budget. Apply is a separate private workflow using
+  only the exact reviewed saved plan, never an automatic operation here.
 - `platform/backup/talos-poc`: an inactive Kustomize overlay with the stable
   `Job/talos-backup-poc-v1`, the shared native backup pod template and suspended
   CronJob. Neither path is added to `clusters/homelab` by preparation.
@@ -38,9 +39,11 @@ Private key material and passphrases must remain outside Git, CI and the Pi.
    both public source and private control changes, then dispatch a plan against
    the full reviewed public SHA. Review the exact encrypted saved plan: one new
    bucket plus its three settings, no existing foundation/state resources.
-3. Add a separately reviewed saved-plan apply path and write-credential boundary
-   before creating the destination. Then provision a bucket-scoped object writer
-   and a separate read-only recovery credential. Audit public-domain bindings;
+3. Review the private recovery-apply.yaml saved-plan path and prepare its separate
+   recovery-production write-credential boundary before creating the destination.
+   Preserve encrypted raw state history before/after apply; a partial failure
+   needs review, not an automatic retry or destruction. Then provision a
+   bucket-scoped object writer and a separate read-only recovery credential. Audit public-domain bindings;
    disabled `r2.dev` alone is not enough. Do not use state credentials in a pod.
 4. Deliver the opt-in backup-only Talos API permission, private Flux source,
    SOPS runtime identity, private ConfigMap and encrypted writer Secret through
@@ -53,6 +56,15 @@ Private key material and passphrases must remain outside Git, CI and the Pi.
    wait for a suspended Job to complete as a Flux readiness gate.
 
 ## Authorize and observe one run
+
+The private repository's docs/runbooks/recovery-runtime.md separates operator-only
+credential input from deterministic provisioning. Public
+management/ansible/recovery-github-environments.yaml declares explicit main-only
+environment policies using existing operator gh authentication, without loading
+secret values. It does not claim private main branch protection or independent
+reviewer approval. management/ansible/recovery-runner-tools.yaml installs the
+native AWS CLI from the Debian 13 signed package repository, without changing
+runner registration, DNS or cluster configuration. Execute them only after review.
 
 Use a separate reviewed private activation commit to set only the PoC Job's
 `spec.suspend=false`. Keep the CronJob suspended. Do not use interactive resource

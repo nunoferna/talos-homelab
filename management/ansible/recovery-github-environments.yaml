@@ -1,0 +1,152 @@
+---
+- name: Declare main-only private recovery environments without handling secrets
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+  vars:
+    recovery_control_repository: nunoferna/talos-homelab-gitops
+    recovery_environments: [recovery-plan, recovery-production]
+  tasks:
+    - name: Require the explicitly reviewed repository and environment names
+      ansible.builtin.assert:
+        that:
+          - recovery_control_repository == 'nunoferna/talos-homelab-gitops'
+          - recovery_environments == ['recovery-plan', 'recovery-production']
+
+    - name: Confirm the existing operator GitHub authentication
+      ansible.builtin.command:
+        argv: [gh, auth, status]
+      changed_when: false
+      check_mode: false
+
+    - name: Read environment names and branch-policy settings only
+      ansible.builtin.command:
+        argv:
+          - gh
+          - api
+          - 'repos/{{ recovery_control_repository }}/environments'
+          - --jq
+          - '[.environments[] | {name, deployment_branch_policy}]'
+      changed_when: false
+      check_mode: false
+      register: recovery_environment_inventory
+
+    - name: Declare explicit custom branch policies for the recovery environments
+      # Do not rely on protected_branches when the repository has no protection.
+      ansible.builtin.command:
+        argv:
+          - gh
+          - api
+          - --method
+          - PUT
+          - 'repos/{{ recovery_control_repository }}/environments/{{ item }}'
+          - -F
+          - 'deployment_branch_policy[protected_branches]=false'
+          - -F
+          - 'deployment_branch_policy[custom_branch_policies]=true'
+      loop: '{{ recovery_environments }}'
+      when: >-
+        (recovery_environment_inventory.stdout | from_json
+        | selectattr('name', 'equalto', item)
+        | selectattr('deployment_branch_policy', 'equalto',
+        {'protected_branches': false, 'custom_branch_policies': true})
+        | list | length) == 0
+
+    - name: Read existing custom deployment branch policies
+      ansible.builtin.command:
+        argv:
+          - gh
+          - api
+          - 'repos/{{ recovery_control_repository }}/environments/{{ item }}/deployment-branch-policies'
+          - --jq
+          - '[.branch_policies[] | {name, type}]'
+      loop: '{{ recovery_environments }}'
+      changed_when: false
+      register: recovery_branch_policies
+      when: not ansible_check_mode
+
+    - name: Reject unexpected branches or tags rather than deleting policies silently
+      ansible.builtin.assert:
+        that:
+          - >-
+            (item.stdout | from_json) | difference([{'name': 'main', 'type': 'branch'}]) | length == 0
+      loop: '{{ recovery_branch_policies.results }}'
+      loop_control:
+        label: '{{ item.item }}'
+      when: not ansible_check_mode
+
+    - name: Declare the one allowed deployment branch
+      ansible.builtin.command:
+        argv:
+          - gh
+          - api
+          - --method
+          - POST
+          - 'repos/{{ recovery_control_repository }}/environments/{{ item.item }}/deployment-branch-policies'
+          - -f
+          - name=main
+          - -f
+          - type=branch
+      loop: '{{ recovery_branch_policies.results }}'
+      loop_control:
+        label: '{{ item.item }}'
+      when:
+        - not ansible_check_mode
+        - item.stdout | from_json | length == 0
+
+    - name: Read only the two existing non-secret state destination variables
+      ansible.builtin.command:
+        argv:
+          - gh
+          - api
+          - 'repos/{{ recovery_control_repository }}/environments/cilium-plan/variables?per_page=100'
+          - --jq
+          - '[.variables[] | select(.name == "R2_STATE_BUCKET" or .name == "R2_S3_ENDPOINT") | {name, value}]'
+      changed_when: false
+      check_mode: false
+      no_log: true
+      register: recovery_source_variables
+
+    - name: Require both existing state destination variables
+      ansible.builtin.assert:
+        that:
+          - >-
+            (recovery_source_variables.stdout | from_json | map(attribute='name') | sort)
+            == ['R2_S3_ENDPOINT', 'R2_STATE_BUCKET']
+      no_log: true
+
+    - name: Read recovery destination variable metadata
+      ansible.builtin.command:
+        argv:
+          - gh
+          - api
+          - 'repos/{{ recovery_control_repository }}/environments/{{ item }}/variables?per_page=100'
+          - --jq
+          - '[.variables[] | {name, value}]'
+      loop: '{{ recovery_environments }}'
+      changed_when: false
+      no_log: true
+      register: recovery_destination_variables
+      when: not ansible_check_mode
+
+    - name: Declare matching non-secret state destination variables
+      ansible.builtin.command:
+        argv:
+          - gh
+          - variable
+          - set
+          - '{{ item.1.name }}'
+          - --repo
+          - '{{ recovery_control_repository }}'
+          - --env
+          - '{{ item.0.item }}'
+          - --body
+          - '{{ item.1.value }}'
+      loop: >-
+        {{ recovery_destination_variables.results
+        | product(recovery_source_variables.stdout | from_json) | list }}
+      no_log: true
+      when:
+        - not ansible_check_mode
+        - item.1 not in (item.0.stdout | from_json)
