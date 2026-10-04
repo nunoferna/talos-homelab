@@ -11,6 +11,11 @@ output "s3_endpoint" {
 }
 
 output "projected_storage_bytes" {
-  description = "Conservative planning estimate including 25% growth and two days of expiry headroom; not a billing cap."
+  description = "Mode-aware planning estimate with 25% headroom; PoC allows two objects, scheduled mode adds two expiry days. Not a billing cap."
   value       = local.projected_storage_bytes
+}
+
+output "backup_mode" {
+  description = "Planning mode only; no Job or CronJob is activated by OpenTofu."
+  value       = var.backup_mode
 }

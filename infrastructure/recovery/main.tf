@@ -2,10 +2,12 @@ locals {
   snapshot_prefix = "etcd/"
   # Planning headroom, NOT an upper bound on Cloudflare lifecycle deletion lag.
   expiry_headroom_days = 2
-  projected_storage_bytes = ceil(
-    var.snapshot_size_bound_bytes * var.snapshots_per_day *
-    (var.retention_days + local.expiry_headroom_days) * 1.25
+  # Kubernetes Jobs are not exactly-once. Allow a duplicate object in the PoC
+  # estimate, but inspect all uploads: this is not a runtime upload-count cap.
+  projected_snapshot_count = var.backup_mode == "poc" ? 2 : (
+    var.snapshots_per_day * (var.retention_days + local.expiry_headroom_days)
   )
+  projected_storage_bytes = ceil(var.snapshot_size_bound_bytes * local.projected_snapshot_count * 1.25)
 }
 
 resource "cloudflare_r2_bucket" "snapshots" {

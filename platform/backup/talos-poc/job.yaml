@@ -1,0 +1,16 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  # Keep this name stable. A new name or deletion can trigger another upload.
+  name: talos-backup-poc-v1
+spec:
+  # A separate reviewed private Git patch is needed to start the PoC.
+  suspend: true
+  parallelism: 1
+  completions: 1
+  backoffLimit: 0
+  activeDeadlineSeconds: 600
+  # No TTL: Flux would recreate a desired Job after automatic deletion.
+  # Kustomize copies the complete native backup pod template from the CronJob.
+  template: {}

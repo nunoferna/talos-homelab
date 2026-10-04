@@ -98,22 +98,36 @@ variable "snapshot_size_bound_bytes" {
   }
 }
 
-variable "snapshots_per_day" {
-  description = "Must match the reviewed CronJob frequency; the staged 15-minute schedule is 96/day."
-  type        = number
-  default     = 96
+variable "backup_mode" {
+  description = "PoC budgets one requested run plus a duplicate-object allowance; scheduled mode needs separate approval."
+  type        = string
+  default     = "poc"
   nullable    = false
 
   validation {
-    condition     = var.snapshots_per_day >= 1 && var.snapshots_per_day <= 96 && floor(var.snapshots_per_day) == var.snapshots_per_day
-    error_message = "Choose an integer number of snapshots/day between 1 and 96."
+    condition     = contains(["poc", "scheduled"], var.backup_mode)
+    error_message = "Choose poc or scheduled; neither mode activates Kubernetes resources."
+  }
+}
+
+variable "snapshots_per_day" {
+  description = "Zero for the one-shot PoC; scheduled mode must match the reviewed CronJob frequency."
+  type        = number
+  default     = 0
+  nullable    = false
+
+  validation {
+    condition = var.backup_mode == "poc" ? var.snapshots_per_day == 0 : (
+      var.snapshots_per_day >= 1 && var.snapshots_per_day <= 96 && floor(var.snapshots_per_day) == var.snapshots_per_day
+    )
+    error_message = "PoC mode requires zero scheduled snapshots/day; scheduled mode requires an integer from 1 to 96."
   }
 }
 
 variable "storage_budget_bytes" {
   description = "Account storage budget reserved for this snapshot prefix; no provider-side spending cap is implied."
   type        = number
-  default     = 4000000000
+  default     = 100000000
   nullable    = false
 
   validation {
@@ -128,7 +142,7 @@ variable "other_account_storage_bytes" {
   nullable    = false
 
   validation {
-    condition     = var.other_account_storage_bytes >= 0
-    error_message = "Supply a nonnegative bound for other account storage."
+    condition     = var.other_account_storage_bytes >= 0 && floor(var.other_account_storage_bytes) == var.other_account_storage_bytes
+    error_message = "Supply a nonnegative integer byte bound for other account storage."
   }
 }
