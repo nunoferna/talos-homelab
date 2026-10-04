@@ -53,6 +53,8 @@ jobs:
           for playbook in discover prepare-artifacts stage activate stop test-proxy runner recovery-tools; do
             ansible-playbook --syntax-check "${playbook}.yaml"
           done
+          ansible-playbook --syntax-check recovery-runner-tools.yaml
+          ansible-playbook --syntax-check recovery-github-environments.yaml
       - name: Compile Python
         run: >-
           python -m py_compile
