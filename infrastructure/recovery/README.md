@@ -37,6 +37,19 @@ No custom domain is declared. Before any snapshot upload, independently inspect
 the bucket's custom-domain bindings and ensure none expose it publicly. Managing
 `r2.dev=false` alone cannot prevent an administrator attaching a custom domain.
 
+## One-shot PoC and later scheduled mode
+
+The current scope is a one-shot recovery PoC. `backup_mode=poc` requires
+`snapshots_per_day=0` and defaults to a 100,000,000-byte budget. Projection is
+`snapshot_size_bound_bytes * 2 * 1.25`, allowing one requested run, a possible
+duplicate object and 25% size headroom. Kubernetes does not guarantee exactly-once
+Job execution; count actual objects and include previous attempts in other usage.
+This is not an upload-count or billing cap. The bucket rules and mandatory
+size/account-usage evidence still apply. No Kubernetes object is activated here.
+
+See the [PoC runbook](../../docs/recovery-poc.md). Recurring backups require a
+separate review, `backup_mode=scheduled`, a matching nonzero cadence and budget.
+
 ## Retention and free-tier guard
 
 The proposal is seven days of lock and expiry, not an approved recovery SLA.
@@ -46,7 +59,7 @@ storage budget, or whose allocated budget plus other account usage exceeds an
 8 decimal GB planning ceiling. That leaves headroom below the account-wide
 10 GB-month Standard free allowance, but **does not enforce a billing cap**.
 
-Sizing uses `snapshot_size_bound_bytes * snapshots_per_day * (retention_days + 2)
+Scheduled-mode sizing uses `snapshot_size_bound_bytes * snapshots_per_day * (retention_days + 2)
 * 1.25`. The two days and 25% are planning headroom, not guaranteed bounds on
 deletion delay or database growth. Include old objects, test uploads, any other
 prefixes, retries and other buckets in account-wide monitoring. Never transition
@@ -55,7 +68,7 @@ and actual daily peak storage before enabling or increasing the schedule.
 
 At the staged 15-minute interval, 96 snapshots/day with seven days' retention
 and this headroom need 1,080 times the per-snapshot byte bound. A 10 MB bound
-needs 10.8 GB and fails the default 4 GB budget. Measure first; if necessary,
+needs 10.8 GB and fails even a 4 GB budget. This is not the PoC projection. Measure first; if necessary,
 review a slower schedule or shorter retention and acknowledge the changed RPO
 or history. The `snapshots_per_day` input must match the CronJob; OpenTofu does
 not control that schedule and cannot enforce the cross-repository match.
@@ -77,8 +90,14 @@ is not protection against removed configuration or account administration.
 tofu fmt -check -diff -recursive infrastructure
 tofu -chdir=infrastructure/recovery init -backend=false -input=false
 tofu -chdir=infrastructure/recovery validate
+# Test-only fixture; never use this value for real state or plans.
+TF_VAR_state_passphrase=NON_SECRET_TEST_FIXTURE_STATE_PASSPHRASE \
+  tofu -chdir=infrastructure/recovery test -no-color
 ```
 
+The native tests use only a mocked provider and plan operations. They check
+PoC/scheduled sizing, invalid modes/cadences, reserved/account budgets and the
+state-bucket targeting guard; they do not validate live Cloudflare behavior.
 These checks need no Cloudflare credential or live backend. The private workflow
 will run `plan -out` only after public CI, source ancestry, input and toolchain
 checks, then publish a checksum-bound encrypted plan. Never apply an unreviewed

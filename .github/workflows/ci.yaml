@@ -58,12 +58,15 @@ jobs:
           python -m py_compile
           tests/proxy_dhcp_isolated.py
           tests/public_manifests.py
+          tests/recovery_poc.py
       - name: Reject plaintext public Secrets
         run: python tests/public_manifests.py
       - name: Render the public Flux root
         run: kubectl kustomize clusters/homelab > /tmp/homelab.yaml
       - name: Render the inactive upstream Talos backup configuration
         run: kubectl kustomize platform/backup/talos > /tmp/talos-backup.yaml
+      - name: Verify the inactive one-shot recovery PoC
+        run: python tests/recovery_poc.py
 
   opentofu:
     name: OpenTofu validation
@@ -91,6 +94,12 @@ jobs:
           tofu -chdir=infrastructure/cilium validate
           tofu -chdir=infrastructure/flux validate
           tofu -chdir=infrastructure/recovery validate
+      - name: Test recovery sizing with an offline mocked provider
+        # Fixture only, not a production passphrase. The root encryption block
+        # needs its variable before test-file variables are evaluated.
+        env:
+          TF_VAR_state_passphrase: NON_SECRET_TEST_FIXTURE_STATE_PASSPHRASE
+        run: tofu -chdir=infrastructure/recovery test -no-color
 
   required:
     name: Static checks

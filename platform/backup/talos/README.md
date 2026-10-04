@@ -5,6 +5,12 @@ only `/talos-backup`: no personal backup scripts, fork or custom container.
 It is intentionally **not referenced by `clusters/homelab`**, and the CronJob is
 suspended. Preparing these files does not establish working backups.
 
+The current milestone is a **one-shot PoC**, not a backup service. Use the
+[inactive PoC overlay](../talos-poc) and [PoC runbook](../../../docs/recovery-poc.md).
+Keep this CronJob suspended; recurring frequency, freshness alerts and destructive
+restore testing are deferred. The production activation gates below describe
+later use, not requirements to claim this limited PoC's acceptance result.
+
 ## Artifact and maturity
 
 The public multi-architecture image index was inspected on 2026-10-03:
