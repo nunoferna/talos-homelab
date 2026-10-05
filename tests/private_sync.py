@@ -14,9 +14,15 @@ def render(path):
 
 
 class PrivateSyncTests(unittest.TestCase):
-    def test_preparation_is_not_in_live_root(self):
-        names = {doc["metadata"]["name"] for doc in render("clusters/homelab")}
-        self.assertTrue(names.isdisjoint({"private-sync", "homelab-private"}))
+    def test_live_root_owns_only_the_bridge_not_its_children(self):
+        docs = render("clusters/homelab")
+        bridge_docs = [doc for doc in docs if doc["metadata"]["name"] == "private-sync"]
+        self.assertEqual(len(bridge_docs), 1)
+        self.assertEqual(bridge_docs[0]["kind"], "Kustomization")
+        self.assertEqual(bridge_docs[0]["spec"]["path"], "./platform/private-sync/resources")
+        self.assertNotIn("homelab-private", {doc["metadata"]["name"] for doc in docs})
+        for doc in docs:
+            self.assertNotIn(doc["kind"], {"Secret", "Job", "CronJob", "Role", "RoleBinding"})
 
     def test_required_runtime_input_and_no_cascade(self):
         bridge, = render("platform/private-sync")

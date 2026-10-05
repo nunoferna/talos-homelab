@@ -70,7 +70,7 @@ jobs:
         run: kubectl kustomize platform/backup/talos > /tmp/talos-backup.yaml
       - name: Verify the inactive one-shot recovery PoC
         run: python tests/recovery_poc.py
-      - name: Verify the inactive bounded private-repository bridge
+      - name: Verify the bounded private-repository bridge
         run: python tests/private_sync.py
 
   opentofu:
