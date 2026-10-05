@@ -61,6 +61,7 @@ jobs:
           tests/proxy_dhcp_isolated.py
           tests/public_manifests.py
           tests/recovery_poc.py
+          tests/private_sync.py
       - name: Reject plaintext public Secrets
         run: python tests/public_manifests.py
       - name: Render the public Flux root
@@ -69,6 +70,8 @@ jobs:
         run: kubectl kustomize platform/backup/talos > /tmp/talos-backup.yaml
       - name: Verify the inactive one-shot recovery PoC
         run: python tests/recovery_poc.py
+      - name: Verify the inactive bounded private-repository bridge
+        run: python tests/private_sync.py
 
   opentofu:
     name: OpenTofu validation

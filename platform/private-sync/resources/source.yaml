@@ -1,0 +1,21 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: homelab-private
+  namespace: flux-system
+spec:
+  interval: 1m
+  timeout: 60s
+  url: ${PRIVATE_GITOPS_URL}
+  ref:
+    branch: main
+  secretRef:
+    name: flux-private-repo
+  # Publish only the current workload root, never private control-plane files.
+  ignore: |
+    /*
+    !/clusters
+    /clusters/*
+    !/clusters/homelab
+    /clusters/homelab/**/*.md
