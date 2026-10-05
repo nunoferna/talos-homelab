@@ -1,0 +1,23 @@
+---
+# Inactive until a separate reviewed commit adds this directory to the live root.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: private-sync
+  namespace: flux-system
+spec:
+  interval: 1m
+  retryInterval: 30s
+  timeout: 3m
+  path: ./platform/private-sync/resources
+  prune: false
+  force: false
+  wait: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: private-gitops-settings
+        optional: false
