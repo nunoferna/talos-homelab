@@ -1,9 +1,10 @@
-# Inactive private-repository bridge
+# Private-repository bridge
 
-Preparation only: this directory is deliberately absent from clusters/homelab.
-Neither merging these manifests nor merging private-root files creates a source
-or changes the cluster. A separate public activation PR follows operator input
-delivery and read-only readiness checks.
+The reviewed activation commit adds this directory to clusters/homelab after
+operator input delivery and read-only metadata verification. Merging that commit
+activates the private Git source and bounded proof root through existing Flux;
+it does not run a backup or make the encrypted writer file reachable.
+See docs/private-gitops-activation.md for scope, acceptance and rollback.
 
 The public root will own private-sync, which uses a required private runtime
 ConfigMap to render the repository URL. The bridge owns the authenticated source,
@@ -40,8 +41,8 @@ public source. Do not mark the reference optional. The initial proof validates
 Git retrieval/reconciliation, not in-cluster SOPS decryption: no encrypted Secret
 is reachable yet. Backup Job/CronJob activation remains a separate gate.
 
-Before activation, rollback is a Git revert only; no runtime action is needed.
-After activation, disable through reviewed Git without deleting credential
+Before the activation PR merges, rollback is a Git revert only; no runtime action
+is needed. After activation, disable through reviewed Git without deleting credential
 Secrets, revoking the deploy key or deleting workloads until the live state and
 ownership are inspected. Credential rotation is separate; no overwrite command
 is included in preparation.
