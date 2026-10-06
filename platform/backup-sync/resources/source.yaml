@@ -1,0 +1,35 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: homelab-backup
+  namespace: flux-system
+spec:
+  interval: 1m
+  timeout: 60s
+  url: ${PRIVATE_GITOPS_URL}
+  ref:
+    branch: main
+  secretRef:
+    name: flux-private-repo
+  # A separate artifact; the existing proof source and role stay unchanged.
+  ignore: |
+    /*
+    !/clusters
+    /clusters/*
+    !/clusters/homelab
+    /clusters/homelab/*
+    !/clusters/homelab/backup
+    /clusters/homelab/backup/**/*.md
+    !/secrets
+    /secrets/*
+    !/secrets/bootstrap
+    /secrets/bootstrap/*
+    !/secrets/bootstrap/kustomization.yaml
+    !/secrets/bootstrap/talos-backup-r2.sops.yaml
+  # Flux assembles both sources; no remote Kustomize fetch or custom copier.
+  include:
+    - repository:
+        name: flux-system
+      fromPath: platform/backup
+      toPath: public/backup

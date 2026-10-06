@@ -55,6 +55,7 @@ jobs:
           done
           ansible-playbook --syntax-check recovery-runner-tools.yaml
           ansible-playbook --syntax-check recovery-github-environments.yaml
+          ansible-playbook --syntax-check talos-backup-access-preview.yaml
       - name: Compile Python
         run: >-
           python -m py_compile
@@ -72,6 +73,10 @@ jobs:
         run: python tests/recovery_poc.py
       - name: Verify the bounded private-repository bridge
         run: python tests/private_sync.py
+      - name: Verify the disconnected backup reconciliation preparation
+        run: python tests/backup_sync.py
+      - name: Exercise native preview guards with synthetic client doubles
+        run: bash tests/backup_access_preview.sh
 
   opentofu:
     name: OpenTofu validation

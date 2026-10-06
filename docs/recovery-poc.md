@@ -22,8 +22,10 @@ Private key material and passphrases must remain outside Git, CI and the Pi.
   CronJob. Neither path is added to `clusters/homelab` by preparation.
 - Private control repository: reviewed identifiers/sizing, plan orchestration,
   exact endpoint policy, public recipients and the allowlisted SOPS writer input.
-  The authenticated private Flux source and SOPS runtime identity are not yet
-  bootstrapped. They must be delivered through reviewed code before reconciliation.
+  The authenticated private Flux proof source and SOPS runtime identity were
+  bootstrapped through reviewed code. Backup inputs/workloads are still excluded
+  from live reconciliation. See [suspended wiring](../platform/backup-sync/README.md)
+  for the separate artifact, impersonation and activation gates.
 
 ## Preparation gates
 

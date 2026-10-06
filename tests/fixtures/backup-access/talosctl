@@ -1,0 +1,25 @@
+#!/bin/bash
+# Native-client double: never invokes Talos or reads any credential contents.
+set -euo pipefail
+if test "$*" = 'version --client'; then
+  printf 'Client:\n\tTag: %s\n' "${BACKUP_FIXTURE_VERSION:-v1.14.1}"
+  exit 0
+fi
+test "$#" = 12
+test "$1" = --talosconfig
+test "$2" = "$BACKUP_ACCESS_TALOSCONFIG"
+test "$3" = --endpoints
+test "$5" = --nodes
+test "$4" = "$6"
+case "$4" in
+  192.0.2.1|192.0.2.2|192.0.2.3) ;;
+  *) exit 1 ;;
+esac
+test "$7" = patch
+test "$8" = machineconfig
+test "$9" = --mode=no-reboot
+test "${10}" = --dry-run
+test "${11}" = --patch
+test "${12}" = "@$BACKUP_PUBLIC_DIRECTORY/infrastructure/talos/etcd-backup-api-access.yaml"
+printf '%s\n' "$4" >> "$BACKUP_FIXTURE_LOG"
+printf 'NON_SECRET_SYNTHETIC_PREVIEW\n'

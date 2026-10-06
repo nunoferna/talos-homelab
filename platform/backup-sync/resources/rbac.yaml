@@ -1,0 +1,135 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: backup-settings-reconciler
+  namespace: flux-system
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: backup-inputs-reconciler
+  namespace: flux-system
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: backup-workload-reconciler
+  namespace: flux-system
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: backup-settings-reconciler
+  namespace: flux-system
+rules:
+  # create cannot be resourceNames-scoped; all subsequent writes are scoped.
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [create]
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [talos-backup-settings]
+    verbs: [get, patch, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: backup-inputs-reconciler
+  namespace: platform-backup
+rules:
+  - apiGroups: [""]
+    resources: [configmaps, secrets]
+    verbs: [create]
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [talos-backup-target]
+    verbs: [get, patch, update]
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [talos-backup-r2]
+    verbs: [get, patch, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: backup-workload-reconciler
+  namespace: platform-backup
+rules:
+  - apiGroups: [""]
+    resources: [serviceaccounts]
+    verbs: [create]
+  - apiGroups: [""]
+    resources: [serviceaccounts]
+    resourceNames: [talos-backup]
+    verbs: [get, patch, update]
+  - apiGroups: [talos.dev]
+    resources: [serviceaccounts]
+    verbs: [create]
+  - apiGroups: [talos.dev]
+    resources: [serviceaccounts]
+    resourceNames: [talos-backup-identity]
+    verbs: [get, patch, update]
+  - apiGroups: [cilium.io]
+    resources: [ciliumnetworkpolicies]
+    verbs: [create]
+  - apiGroups: [cilium.io]
+    resources: [ciliumnetworkpolicies]
+    resourceNames: [talos-backup]
+    verbs: [get, patch, update]
+  - apiGroups: [batch]
+    resources: [jobs, cronjobs]
+    verbs: [create]
+  - apiGroups: [batch]
+    resources: [jobs]
+    resourceNames: [talos-backup-poc-v1]
+    verbs: [get, patch, update]
+  - apiGroups: [batch]
+    resources: [cronjobs]
+    resourceNames: [talos-backup]
+    verbs: [get, patch, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: backup-settings-reconciler
+  namespace: flux-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: backup-settings-reconciler
+subjects:
+  - kind: ServiceAccount
+    name: backup-settings-reconciler
+    namespace: flux-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: backup-inputs-reconciler
+  namespace: platform-backup
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: backup-inputs-reconciler
+subjects:
+  - kind: ServiceAccount
+    name: backup-inputs-reconciler
+    namespace: flux-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: backup-workload-reconciler
+  namespace: platform-backup
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: backup-workload-reconciler
+subjects:
+  - kind: ServiceAccount
+    name: backup-workload-reconciler
+    namespace: flux-system
