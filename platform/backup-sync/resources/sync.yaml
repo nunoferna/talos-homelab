@@ -1,0 +1,69 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: talos-backup-settings
+  namespace: flux-system
+spec:
+  interval: 1m
+  retryInterval: 30s
+  timeout: 2m
+  sourceRef:
+    kind: GitRepository
+    name: homelab-backup
+  path: ./clusters/homelab/backup/settings
+  serviceAccountName: backup-settings-reconciler
+  prune: false
+  force: false
+  wait: false
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: talos-backup-inputs
+  namespace: flux-system
+spec:
+  interval: 1m
+  retryInterval: 30s
+  timeout: 2m
+  sourceRef:
+    kind: GitRepository
+    name: homelab-backup
+  path: ./clusters/homelab/backup/inputs
+  serviceAccountName: backup-inputs-reconciler
+  decryption:
+    provider: sops
+    secretRef:
+      name: sops-age
+  prune: false
+  force: false
+  wait: false
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: talos-backup-poc
+  namespace: flux-system
+spec:
+  interval: 1m
+  retryInterval: 30s
+  timeout: 2m
+  dependsOn:
+    - name: talos-backup-settings
+    - name: talos-backup-inputs
+  sourceRef:
+    kind: GitRepository
+    name: homelab-backup
+  path: ./clusters/homelab/backup/workload
+  serviceAccountName: backup-workload-reconciler
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: talos-backup-settings
+        optional: false
+  # Preserve the stable Job and identity if a manifest is accidentally removed.
+  prune: false
+  deletionPolicy: Orphan
+  force: false
+  # A suspended Job cannot Complete. Readiness here is apply, not backup proof.
+  wait: false

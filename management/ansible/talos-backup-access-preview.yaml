@@ -1,0 +1,157 @@
+---
+- name: Preview the backup-only Talos document without changing any node
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+  vars:
+    ansible_pipelining: true
+    backup_access_private_vars: '{{ lookup("ansible.builtin.env", "BACKUP_ACCESS_PRIVATE_VARS") }}'
+    backup_access_talosconfig: '{{ lookup("ansible.builtin.env", "BACKUP_ACCESS_TALOSCONFIG") }}'
+    backup_access_kubeconfig: '{{ lookup("ansible.builtin.env", "BACKUP_ACCESS_KUBECONFIG") }}'
+    backup_access_patch: >-
+      {{ (playbook_dir ~ '/../../infrastructure/talos/etcd-backup-api-access.yaml') | realpath }}
+  tasks:
+    - name: Require explicit operator paths and refuse check-mode ambiguity
+      ansible.builtin.assert:
+        that:
+          - not ansible_check_mode
+          - backup_access_private_vars is match('^/.+')
+          - backup_access_talosconfig is match('^/.+')
+          - backup_access_kubeconfig is match('^/.+')
+
+    - name: Load only non-secret reviewed environment targets
+      ansible.builtin.include_vars:
+        file: '{{ backup_access_private_vars }}'
+
+    - name: Validate the narrow environment contract
+      ansible.builtin.assert:
+        that:
+          - backup_access_nodes | length == 3
+          - backup_access_nodes | map(attribute='name') | unique | length == 3
+          - backup_access_nodes | map(attribute='address') | unique | length == 3
+          - backup_access_api_server is match('^https://[0-9.]+:6443$')
+          - backup_cluster_uid is match('^[0-9a-f-]{36}$')
+          - backup_access_kubernetes_context | length > 0
+
+    - name: Identify the local operator uid without gathering private facts
+      ansible.builtin.command:
+        argv: [id, -u]
+      changed_when: false
+      register: backup_access_operator_uid
+
+    - name: Validate private credential file metadata without reading contents
+      ansible.builtin.stat:
+        path: '{{ item }}'
+        follow: false
+        get_checksum: false
+        get_mime: false
+      loop:
+        - '{{ backup_access_talosconfig }}'
+        - '{{ backup_access_kubeconfig }}'
+      register: backup_access_credential_stats
+
+    - name: Require existing regular mode-0600 private credential files
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.isreg
+          - not item.stat.islnk
+          - item.stat.mode == '0600'
+          - item.stat.uid == backup_access_operator_uid.stdout | int
+      loop: '{{ backup_access_credential_stats.results }}'
+      loop_control:
+        label: credential metadata
+
+    - name: Confirm the pinned Talos client without loading credentials
+      ansible.builtin.command:
+        argv: [talosctl, version, --client]
+      changed_when: false
+      register: backup_access_client
+
+    - name: Reject a client version outside this reviewed configuration generation
+      ansible.builtin.assert:
+        that:
+          - backup_access_client.stdout is search('Tag:\s+v1\.14\.1(\s|$)')
+
+    - name: Identify the selected Kubernetes API without printing its credentials
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - --kubeconfig
+          - '{{ backup_access_kubeconfig }}'
+          - --context
+          - '{{ backup_access_kubernetes_context }}'
+          - config
+          - view
+          - --minify
+          - '-o=jsonpath={.clusters[0].cluster.server}'
+      changed_when: false
+      register: backup_access_server
+
+    - name: Read the existing cluster namespace identity
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - --kubeconfig
+          - '{{ backup_access_kubeconfig }}'
+          - --context
+          - '{{ backup_access_kubernetes_context }}'
+          - get
+          - namespace
+          - kube-system
+          - '-o=jsonpath={.metadata.uid}'
+      changed_when: false
+      register: backup_access_identity
+
+    - name: Stop on any wrong cluster identity
+      ansible.builtin.assert:
+        that:
+          - backup_access_server.stdout == backup_access_api_server
+          - backup_access_identity.stdout == backup_cluster_uid
+
+    - name: Check all existing control-plane nodes are Ready
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - --kubeconfig
+          - '{{ backup_access_kubeconfig }}'
+          - --context
+          - '{{ backup_access_kubernetes_context }}'
+          - wait
+          - --for=condition=Ready
+          - node
+          - '{{ item.name }}'
+          - --timeout=30s
+      loop: '{{ backup_access_nodes }}'
+      changed_when: false
+
+    - name: Ask each authenticated Talos node to preview only the committed patch
+      # A preview may include sensitive machine-configuration fragments.
+      # Do not emit it, persist it as a fact, or send it to CI/chat.
+      ansible.builtin.command:
+        argv:
+          - talosctl
+          - --talosconfig
+          - '{{ backup_access_talosconfig }}'
+          - --endpoints
+          - '{{ item.address }}'
+          - --nodes
+          - '{{ item.address }}'
+          - patch
+          - machineconfig
+          - --mode=no-reboot
+          - --dry-run
+          - --patch
+          - '@{{ backup_access_patch }}'
+      loop: '{{ backup_access_nodes }}'
+      changed_when: false
+      no_log: true
+
+    - name: Report the read-only boundary
+      ansible.builtin.debug:
+        msg: >-
+          Native previews passed on the three reviewed targets. No Talos
+          configuration was delivered and no backup was activated. A preview
+          exit code is not proof of delivery, unchanged full configurations,
+          etcd quorum health, or backup recoverability. Review delivery separately.

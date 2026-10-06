@@ -1,0 +1,22 @@
+#!/bin/bash
+# Native-client double with an explicit read-only command allowlist.
+set -euo pipefail
+test "$1" = --kubeconfig
+test "$2" = "$BACKUP_ACCESS_KUBECONFIG"
+test "$3" = --context
+test "$4" = fixture
+shift 4
+case "$*" in
+  'config view --minify -o=jsonpath={.clusters[0].cluster.server}')
+    printf '%s' "${BACKUP_FIXTURE_SERVER:-https://192.0.2.70:6443}"
+    ;;
+  'get namespace kube-system -o=jsonpath={.metadata.uid}')
+    printf '%s' "${BACKUP_FIXTURE_UID:-11111111-1111-1111-1111-111111111111}"
+    ;;
+  'wait --for=condition=Ready node fixture01 --timeout=30s'|\
+  'wait --for=condition=Ready node fixture02 --timeout=30s'|\
+  'wait --for=condition=Ready node fixture03 --timeout=30s')
+    printf 'node condition met\n'
+    ;;
+  *) exit 1 ;;
+esac

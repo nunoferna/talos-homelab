@@ -1,0 +1,11 @@
+---
+backup_access_nodes:
+  - name: fixture01
+    address: 192.0.2.1
+  - name: fixture02
+    address: 192.0.2.2
+  - name: fixture03
+    address: 192.0.2.3
+backup_access_api_server: https://192.0.2.70:6443
+backup_cluster_uid: 11111111-1111-1111-1111-111111111111
+backup_access_kubernetes_context: fixture
