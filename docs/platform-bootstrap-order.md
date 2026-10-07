@@ -17,6 +17,12 @@ to recover a lower layer.
    sourced from OpenBao.
 7. **Applications and policies** are introduced namespace by namespace.
 
+An empty, namespace-scoped ESO controller can be installed independently before
+storage or OpenBao. The [controller-only PoC](../platform/external-secrets/README.md)
+does exactly that; it does not move real secret-store integration ahead of its
+dependencies. Persistent storage is still undecided and OpenBao is not deployed.
+Etcd backup work is deferred, not completed, and remains inactive.
+
 ## Why Cilium precedes Flux
 
 Flux controllers require working pod networking. Cilium is therefore a day-0
@@ -30,10 +36,11 @@ rules. Begin with policy enforcement disabled during migration, observe flows,
 allow DNS and required control-plane dependencies, and introduce default-deny
 one namespace at a time.
 
-## Existing-cluster migration gate
+## Historical existing-cluster migration gate
 
-The current cluster uses Flannel and kube-proxy. Replacing either is a
-high-impact networking change and must be staged:
+The original cluster used Flannel and kube-proxy. Cilium is now installed via
+OpenTofu; this migration checklist is retained for a future rebuild, not as a
+description of today's CNI. Replacing either is a high-impact change:
 
 1. Pin a stable Cilium release whose tested matrix includes the cluster's
    Kubernetes version.
@@ -57,10 +64,14 @@ health gate and rollback point.
 
 The cluster currently runs Kubernetes 1.37.0. At the time this decision was
 recorded, stable Cilium 1.20.2 guaranteed compatibility through Kubernetes 1.36;
-Cilium 1.21 had Kubernetes 1.37 support in prerelease builds only. Do not deploy
-a prerelease CNI beneath OpenBao. Proceed when a stable release explicitly adds
-Kubernetes 1.37 to its tested matrix, or make a separately approved cluster
-version/rebuild decision.
+Cilium 1.21 had Kubernetes 1.37 support in prerelease builds only. The operator
+separately accepted continuing with stable Cilium 1.20.2; that acceptance is not
+an upstream compatibility guarantee. Recheck the supported matrix before
+persistent OpenBao or make a separately reviewed cluster-version decision.
+
+ESO 2.11 likewise publishes support through Kubernetes 1.36. The operator
+accepted a controller-only PoC on 1.37 on 2026-10-07, without secret stores or
+real credentials. Passing static checks is not a runtime compatibility result.
 
 ## OpenBao and SOPS rules
 
