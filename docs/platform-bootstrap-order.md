@@ -20,7 +20,9 @@ to recover a lower layer.
 An empty, namespace-scoped ESO controller can be installed independently before
 storage or OpenBao. The [controller-only PoC](../platform/external-secrets/README.md)
 does exactly that; it does not move real secret-store integration ahead of its
-dependencies. Persistent storage is still undecided and OpenBao is not deployed.
+dependencies. Rook/Ceph is the selected storage direction, but its
+[preparation](../platform/rook-ceph/README.md) is disconnected and suspended
+pending dedicated data disks and prerequisite validation. OpenBao is not deployed.
 Etcd backup work is deferred, not completed, and remains inactive.
 
 ## Why Cilium precedes Flux

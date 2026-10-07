@@ -23,6 +23,8 @@ repository or independently secured storage.
 - `clusters/homelab/`: active public Flux reconciliation root.
 - `platform/external-secrets/`: namespace-scoped, controller-only ESO PoC;
   no stores or credentials. See its [acceptance runbook](platform/external-secrets/README.md).
+- `platform/rook-ceph/`: inactive Rook/Ceph preparation; no disk claims or CSI
+  deployment. See the [hardware and activation gates](platform/rook-ceph/README.md).
 - `platform/backup/talos/`: staged upstream encrypted etcd backup configuration;
   not reconciled or scheduled yet. See its [activation runbook](platform/backup/talos/README.md).
 - `management/ansible/`: narrowly scoped provisioning-host discovery and

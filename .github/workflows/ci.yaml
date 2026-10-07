@@ -64,6 +64,7 @@ jobs:
           tests/recovery_poc.py
           tests/private_sync.py
           tests/external_secrets.py
+          tests/rook_preparation.py
       - name: Reject plaintext public Secrets
         run: python tests/public_manifests.py
       - name: Render the public Flux root
@@ -97,6 +98,17 @@ jobs:
         env:
           ESO_CHART_ARCHIVE: ${{ runner.temp }}/eso-offline-check/external-secrets.tgz
         run: python tests/external_secrets.py
+      - name: Fetch the Rook operator chart for offline preparation checks
+        env:
+          ROOK_CHART_ARCHIVE: ${{ runner.temp }}/eso-offline-check/rook-ceph.tgz
+        run: |
+          curl --fail --silent --show-error --location \
+            https://charts.rook.io/release/rook-ceph-1.21.0.tgz \
+            --output "$ROOK_CHART_ARCHIVE"
+      - name: Verify disconnected Rook preparation without CSI or disk claims
+        env:
+          ROOK_CHART_ARCHIVE: ${{ runner.temp }}/eso-offline-check/rook-ceph.tgz
+        run: python tests/rook_preparation.py
       - name: Exercise native preview guards with synthetic client doubles
         run: bash tests/backup_access_preview.sh
 
