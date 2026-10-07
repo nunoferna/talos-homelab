@@ -63,6 +63,7 @@ jobs:
           tests/public_manifests.py
           tests/recovery_poc.py
           tests/private_sync.py
+          tests/external_secrets.py
       - name: Reject plaintext public Secrets
         run: python tests/public_manifests.py
       - name: Render the public Flux root
@@ -75,6 +76,27 @@ jobs:
         run: python tests/private_sync.py
       - name: Verify the disconnected backup reconciliation preparation
         run: python tests/backup_sync.py
+      - name: Prepare checksum-pinned offline Helm renderer and ESO chart
+        env:
+          ESO_CHECK_DIR: ${{ runner.temp }}/eso-offline-check
+          ESO_RELEASE_URL: https://github.com/external-secrets/external-secrets/releases/download/helm-chart-2.11.0
+        run: |
+          mkdir -p "$ESO_CHECK_DIR"
+          curl --fail --silent --show-error --location \
+            https://get.helm.sh/helm-v4.3.0-linux-amd64.tar.gz \
+            --output "$ESO_CHECK_DIR/helm.tar.gz"
+          printf '%s  %s\n' \
+            '86584a54def73570558f66f5111cc53dfed56689637ae32c1201205d494f54fb' \
+            "$ESO_CHECK_DIR/helm.tar.gz" | sha256sum --check --strict
+          tar -xzf "$ESO_CHECK_DIR/helm.tar.gz" -C "$ESO_CHECK_DIR" linux-amd64/helm
+          printf '%s\n' "$ESO_CHECK_DIR/linux-amd64" >> "$GITHUB_PATH"
+          curl --fail --silent --show-error --location \
+            "$ESO_RELEASE_URL/external-secrets-2.11.0.tgz" \
+            --output "$ESO_CHECK_DIR/external-secrets.tgz"
+      - name: Verify the empty namespace-scoped ESO chart on Kubernetes 1.37
+        env:
+          ESO_CHART_ARCHIVE: ${{ runner.temp }}/eso-offline-check/external-secrets.tgz
+        run: python tests/external_secrets.py
       - name: Exercise native preview guards with synthetic client doubles
         run: bash tests/backup_access_preview.sh
 
