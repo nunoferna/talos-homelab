@@ -17,7 +17,7 @@ The OpenTofu legacy-kubelet flag defaults to false. Existing installer images,
 cluster identity, bootstrap resource addresses, backend, and private inventory
 remain unchanged. Image Factory input under `host/` is a candidate, not a
 schematic already generated or installed. There is currently no approved
-Longhorn host-upgrade/delivery workflow; creating that automation is a required
+Longhorn host-upgrade/delivery playbook; creating that automation is a required
 next stage, not a manual-command workaround.
 
 ## Compatibility decision before activation
@@ -47,10 +47,11 @@ installed, or storage working. Reviewed full-config comparison and serial
 delivery remain necessary. The private repository holds targets and the first
 selected node; do not commit site-specific addresses here.
 
-Do not silently reuse the Pi's Kubernetes OIDC identity for the Talos API. No
-Talos credential distribution to the runner is authorized by this preparation.
-Until that custody path is separately reviewed, use the existing protected local
-operator context for read-only previews only. No new credentials are required.
+The operator selected protected Mac credentials and reviewed local Ansible for
+this PoC on 2026-10-12. Do not reuse the Pi's Kubernetes OIDC identity for Talos,
+or distribute Talos credentials to the runner/GitHub. The current implementation
+is read-only; approval-gated local delivery remains a separate stage. No new
+credentials are required for the preview.
 
 The early Talos 1.14 alpha `noexec` warning for `/var` was reverted before stable
 1.14.0 (release changelog: `6fa811a0d`, drop `noexec` for KUBELET, EPHEMERAL and
@@ -65,7 +66,7 @@ Each approved storage node needs `siderolabs/iscsi-tools` and
 1. Review `host/image-factory-schematic.yaml` against the existing private
    schematic. Preserve Secure Boot, overlays, kernel arguments, and any existing
    extensions; this candidate is not permission to replace other customization.
-2. Implement a protected private-repository workflow that records the exact
+2. Implement reviewed, approval-gated local Ansible with private inputs that records the exact
    Image Factory schematic and installer image, performs a reviewed one-node
    Talos upgrade, and stops unless API, etcd, Cilium, and Flux remain healthy.
    Keep Talos at the reviewed version; installing extensions does not require
