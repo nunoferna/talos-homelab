@@ -30,10 +30,27 @@ tested Kubernetes matrix through 1.36 and lists Talos 1.13.4 as verified.
 The cluster was read-only verified as Talos 1.14.1 / Kubernetes 1.37.0 on
 2026-10-12. A passing Helm render on 1.37 is **not** a compatibility certification.
 
-Before activation, either record explicit operator acceptance of this exact
-version combination for a disposable-data PoC, or choose a separately reviewed
-supported-version path. This preparation does not approve a downgrade or an
-OS upgrade. Prior Cilium/ESO PoC acceptance does not cover storage.
+On 2026-10-12 the operator explicitly accepted Longhorn 1.13.0 on Talos
+1.14.1 / Kubernetes 1.37.0 for **disposable-data PoC only**. This is not a
+tested-matrix certification or permission to store real OpenBao/application
+secrets. This acceptance does not approve a downgrade, OS upgrade, configuration
+delivery, or storage activation; those retain their separate review gates.
+
+The read-only `management/ansible/talos-longhorn-host-preview.yaml` checks the
+private target contract, protected local credential metadata, exact cluster and
+node identities/versions, and native cluster health before asking **one** named
+node to preview the committed kubelet patch. It never applies configuration,
+upgrades, labels a node, registers a schematic, or touches OpenTofu state. Native
+preview output is suppressed because it can contain machine secrets. Passing
+this check does not prove custom kubelet settings were preserved, extensions
+installed, or storage working. Reviewed full-config comparison and serial
+delivery remain necessary. The private repository holds targets and the first
+selected node; do not commit site-specific addresses here.
+
+Do not silently reuse the Pi's Kubernetes OIDC identity for the Talos API. No
+Talos credential distribution to the runner is authorized by this preparation.
+Until that custody path is separately reviewed, use the existing protected local
+operator context for read-only previews only. No new credentials are required.
 
 The early Talos 1.14 alpha `noexec` warning for `/var` was reverted before stable
 1.14.0 (release changelog: `6fa811a0d`, drop `noexec` for KUBELET, EPHEMERAL and

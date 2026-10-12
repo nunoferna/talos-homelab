@@ -56,6 +56,7 @@ jobs:
           ansible-playbook --syntax-check recovery-runner-tools.yaml
           ansible-playbook --syntax-check recovery-github-environments.yaml
           ansible-playbook --syntax-check talos-backup-access-preview.yaml
+          ansible-playbook --syntax-check talos-longhorn-host-preview.yaml
       - name: Compile Python
         run: >-
           python -m py_compile
@@ -122,6 +123,8 @@ jobs:
         run: python tests/longhorn_preparation.py
       - name: Exercise native preview guards with synthetic client doubles
         run: bash tests/backup_access_preview.sh
+      - name: Exercise single-node Longhorn preview guards without credentials
+        run: bash tests/longhorn_host_preview.sh
 
   opentofu:
     name: OpenTofu validation
