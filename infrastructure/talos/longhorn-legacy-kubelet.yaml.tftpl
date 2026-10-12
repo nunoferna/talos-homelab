@@ -1,0 +1,19 @@
+# Opt-in schema conversion for Talos 1.14.1; not a standalone node configuration.
+# Preserve the generated kubelet image, seccomp, and static-pod-directory policy.
+apiVersion: v1alpha1
+kind: KubeletConfig
+$patch: delete
+---
+machine:
+  kubelet:
+    image: ghcr.io/siderolabs/kubelet:${kubernetes_version}
+    defaultRuntimeSeccompProfileEnabled: true
+    disableManifestsDirectory: true
+    extraMounts:
+      - destination: /var/lib/longhorn
+        source: /var/lib/longhorn
+        type: bind
+        options:
+          - bind
+          - rshared
+          - rw

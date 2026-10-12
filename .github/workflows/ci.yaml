@@ -56,6 +56,7 @@ jobs:
           ansible-playbook --syntax-check recovery-runner-tools.yaml
           ansible-playbook --syntax-check recovery-github-environments.yaml
           ansible-playbook --syntax-check talos-backup-access-preview.yaml
+          ansible-playbook --syntax-check talos-longhorn-host-preview.yaml
       - name: Compile Python
         run: >-
           python -m py_compile
@@ -64,6 +65,7 @@ jobs:
           tests/recovery_poc.py
           tests/private_sync.py
           tests/external_secrets.py
+          tests/longhorn_preparation.py
       - name: Reject plaintext public Secrets
         run: python tests/public_manifests.py
       - name: Render the public Flux root
@@ -97,8 +99,32 @@ jobs:
         env:
           ESO_CHART_ARCHIVE: ${{ runner.temp }}/eso-offline-check/external-secrets.tgz
         run: python tests/external_secrets.py
+      - name: Download the official Longhorn preparation chart
+        env:
+          LONGHORN_CHECK_DIR: ${{ runner.temp }}/longhorn-offline-check
+          LONGHORN_RELEASE_URL: https://github.com/longhorn/charts/releases/download/longhorn-1.13.0
+          TALOS_RELEASE_URL: https://github.com/siderolabs/talos/releases/download/v1.14.1
+        run: |
+          mkdir -p "$LONGHORN_CHECK_DIR"
+          curl --fail --silent --show-error --location \
+            "$LONGHORN_RELEASE_URL/longhorn-1.13.0.tgz" \
+            --output "$LONGHORN_CHECK_DIR/longhorn.tgz"
+          curl --fail --silent --show-error --location \
+            "$TALOS_RELEASE_URL/talosctl-linux-amd64" \
+            --output "$LONGHORN_CHECK_DIR/talosctl"
+          printf '%s  %s\n' \
+            '7233ece94c94296a033a6ddb5efe0baf508a94c71de7e6c7b286500705924208' \
+            "$LONGHORN_CHECK_DIR/talosctl" | sha256sum --check --strict
+          chmod 0755 "$LONGHORN_CHECK_DIR/talosctl"
+      - name: Verify disconnected Longhorn preparation with offline Helm
+        env:
+          LONGHORN_CHART_ARCHIVE: ${{ runner.temp }}/longhorn-offline-check/longhorn.tgz
+          TALOSCTL: ${{ runner.temp }}/longhorn-offline-check/talosctl
+        run: python tests/longhorn_preparation.py
       - name: Exercise native preview guards with synthetic client doubles
         run: bash tests/backup_access_preview.sh
+      - name: Exercise single-node Longhorn preview guards without credentials
+        run: bash tests/longhorn_host_preview.sh
 
   opentofu:
     name: OpenTofu validation

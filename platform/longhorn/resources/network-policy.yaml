@@ -1,0 +1,48 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: longhorn-candidate
+  namespace: longhorn-system
+spec:
+  endpointSelector: {}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: longhorn-system
+    # Dynamic storage ports and node probes: deliberately broad node trust.
+    - fromEntities:
+        - host
+        - remote-node
+    - fromEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: '9501'
+              protocol: TCP
+            - port: '9502'
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: longhorn-system
+    - toEntities:
+        - host
+        - remote-node
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: '443'
+              protocol: TCP
+            - port: '6443'
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s:k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: '53'
+              protocol: UDP
+            - port: '53'
+              protocol: TCP

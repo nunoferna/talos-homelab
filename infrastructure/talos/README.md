@@ -12,6 +12,14 @@ requires OpenTofu 1.12.6 because state and plan encryption are enforced.
   the one-time bootstrap resource. Never use the Kubernetes VIP.
 - `state_passphrase`: required ephemeral encryption passphrase of at least 32
   characters. Back it up independently and never commit it.
+- `enable_longhorn_legacy_kubelet`: optional, default false. Renders an explicit
+  kubelet schema conversion because Talos 1.14's `KubeletConfig` cannot coexist
+  with the guide's `.machine.kubelet.extraMounts`. Preserves the generated image,
+  default seccomp and disabled static-pod-directory policy, and adds the
+  `/var/lib/longhorn` bind mount. It does not allocate partitions, change the
+  installer schematic, install extensions, or deliver configuration. Review
+  every kubelet setting before opting in; see the
+  [inactive Longhorn preparation](../../platform/longhorn/README.md).
 - `enable_etcd_backup_api_access`: optional, default false. Adds the native
   Talos API-access document permitting only `os:etcd:backup` identities from
   `platform-backup`. It renders configuration only, without delivering it to

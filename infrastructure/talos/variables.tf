@@ -1,3 +1,10 @@
+variable "enable_longhorn_legacy_kubelet" {
+  description = "Opt in to rendering a Talos 1.14 legacy-kubelet schema conversion for Longhorn V1 mounts. Does not install extensions or deliver configuration."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
 variable "enable_etcd_backup_api_access" {
   description = "Opt in to namespace-scoped, snapshot-only Talos API access. Rendering only; reviewed node delivery is separate."
   type        = bool

@@ -1,0 +1,34 @@
+#!/bin/bash
+# Refuses mutations and any node except the single selected fixture target.
+set -euo pipefail
+if test "$*" = 'version --client --short'; then
+  printf 'Client:\nTalos %s\n' "${LONGHORN_FIXTURE_CLIENT:-v1.14.1}"
+  exit 0
+fi
+test "$1" = --talosconfig
+test "$2" = "$LONGHORN_TALOSCONFIG"
+test "$3" = --endpoints
+test "$4" = 192.0.2.1
+test "$5" = --nodes
+test "$6" = 192.0.2.1
+shift 6
+if test "$1" = health; then
+  expected_health='health --server=false --control-plane-nodes 192.0.2.1,192.0.2.2,192.0.2.3'
+  expected_health+=' --wait-timeout=30s --k8s-endpoint https://192.0.2.70:6443'
+  test "$*" = "$expected_health"
+  test "$KUBECONFIG" = "$LONGHORN_KUBECONFIG"
+  test "${LONGHORN_FIXTURE_HEALTH:-pass}" = pass
+  exit 0
+fi
+test "$#" = 6
+test "$1" = patch
+test "$2" = machineconfig
+test "$3" = --mode=auto
+test "$4" = --dry-run
+test "$5" = --patch
+expected_patch="$(sed 's/${kubernetes_version}/v1.37.0/g' \
+  "$LONGHORN_PUBLIC_DIRECTORY/infrastructure/talos/longhorn-legacy-kubelet.yaml.tftpl")"
+test "$6" = "$expected_patch"
+printf '192.0.2.1\n' >> "$LONGHORN_FIXTURE_LOG"
+printf 'NON_SECRET_SYNTHETIC_MACHINE_DIFF\n'
+test "${LONGHORN_FIXTURE_PREVIEW:-pass}" = pass

@@ -1,0 +1,260 @@
+---
+- name: Preview one Longhorn host prerequisite without changing the cluster
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+  vars:
+    ansible_pipelining: true
+    longhorn_private_vars: '{{ lookup("ansible.builtin.env", "LONGHORN_PRIVATE_VARS") }}'
+    longhorn_talosconfig: '{{ lookup("ansible.builtin.env", "LONGHORN_TALOSCONFIG") }}'
+    longhorn_kubeconfig: '{{ lookup("ansible.builtin.env", "LONGHORN_KUBECONFIG") }}'
+    longhorn_patch_file: >-
+      {{ (playbook_dir ~ '/../../infrastructure/talos/longhorn-legacy-kubelet.yaml.tftpl') | realpath }}
+  tasks:
+    - name: Require explicit protected paths and a real preview rather than check mode
+      ansible.builtin.assert:
+        that:
+          - not ansible_check_mode
+          - longhorn_private_vars is match('^/.+')
+          - longhorn_talosconfig is match('^/.+')
+          - longhorn_kubeconfig is match('^/.+')
+
+    - name: Load the reviewed non-secret private targets
+      ansible.builtin.include_vars:
+        file: '{{ longhorn_private_vars }}'
+      no_log: true
+
+    - name: Require the exact disposable PoC contract and one selected node
+      ansible.builtin.assert:
+        that:
+          - longhorn_host_phase == 'preview-only'
+          - longhorn_disposable_poc_accepted | bool
+          - longhorn_host_nodes | length == 3
+          - longhorn_host_nodes | map(attribute='name') | unique | length == 3
+          - longhorn_host_nodes | map(attribute='address') | unique | length == 3
+          - longhorn_host_target in longhorn_host_nodes | map(attribute='name') | list
+          - longhorn_host_api_server is match('^https://[0-9.]+:6443$')
+          - longhorn_host_cluster_uid is match('^[0-9a-f-]{36}$')
+          - longhorn_host_kubernetes_context | length > 0
+      no_log: true
+
+    - name: Identify the local operator without private facts
+      ansible.builtin.command:
+        argv: [id, -u]
+      changed_when: false
+      register: longhorn_operator_uid
+
+    - name: Check credential metadata without reading or hashing credentials
+      ansible.builtin.stat:
+        path: '{{ item }}'
+        follow: false
+        get_checksum: false
+        get_mime: false
+      loop:
+        - '{{ longhorn_talosconfig }}'
+        - '{{ longhorn_kubeconfig }}'
+      register: longhorn_credential_stats
+      no_log: true
+
+    - name: Reject missing linked foreign-owned or insufficiently protected credentials
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.isreg
+          - not item.stat.islnk
+          - item.stat.mode == '0600'
+          - item.stat.uid == longhorn_operator_uid.stdout | int
+      loop: '{{ longhorn_credential_stats.results }}'
+      no_log: true
+
+    - name: Verify the native client version without loading credentials
+      ansible.builtin.command:
+        argv: [talosctl, version, --client, --short]
+      changed_when: false
+      register: longhorn_client
+
+    - name: Require Talos 1.14.1 for the reviewed schema conversion
+      ansible.builtin.assert:
+        that:
+          - "longhorn_client.stdout | trim == 'Client:\nTalos v1.14.1'"
+
+    - name: Identify the Kubernetes API without exposing credentials
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - --kubeconfig
+          - '{{ longhorn_kubeconfig }}'
+          - --context
+          - '{{ longhorn_host_kubernetes_context }}'
+          - config
+          - view
+          - --minify
+          - '-o=jsonpath={.clusters[0].cluster.server}'
+      changed_when: false
+      register: longhorn_server
+      no_log: true
+
+    - name: Read the independent Kubernetes cluster identity
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - --kubeconfig
+          - '{{ longhorn_kubeconfig }}'
+          - --context
+          - '{{ longhorn_host_kubernetes_context }}'
+          - get
+          - namespace
+          - kube-system
+          - '-o=jsonpath={.metadata.uid}'
+      changed_when: false
+      register: longhorn_identity
+      no_log: true
+
+    - name: Refuse the wrong cluster before contacting a Talos node
+      ansible.builtin.assert:
+        that:
+          - longhorn_server.stdout == longhorn_host_api_server
+          - longhorn_identity.stdout == longhorn_host_cluster_uid
+      no_log: true
+
+    - name: Read node readiness identities and versions
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - --kubeconfig
+          - '{{ longhorn_kubeconfig }}'
+          - --context
+          - '{{ longhorn_host_kubernetes_context }}'
+          - get
+          - nodes
+          - -o=json
+      changed_when: false
+      register: longhorn_live_nodes
+      no_log: true
+
+    - name: Require exactly the reviewed node set
+      ansible.builtin.assert:
+        that:
+          - >-
+            ((longhorn_live_nodes.stdout | from_json)['items'] | map(attribute='metadata.name') | sort | list)
+            == (longhorn_host_nodes | map(attribute='name') | sort | list)
+      no_log: true
+
+    - name: Refuse version drift unhealthy nodes or a node address mismatch
+      ansible.builtin.assert:
+        that:
+          - item.status.nodeInfo.osImage == 'Talos (v1.14.1)'
+          - item.status.nodeInfo.kubeletVersion == 'v1.37.0'
+          - >-
+            (item.status.conditions | selectattr('type', 'equalto', 'Ready')
+            | selectattr('status', 'equalto', 'True') | list | length) == 1
+          - >-
+            (item.status.addresses | selectattr('type', 'equalto', 'InternalIP')
+            | map(attribute='address') | list)
+            == (longhorn_host_nodes | selectattr('name', 'equalto', item.metadata.name)
+            | map(attribute='address') | list)
+      loop: "{{ (longhorn_live_nodes.stdout | from_json)['items'] }}"
+      no_log: true
+
+    - name: Require the existing Cilium rollout to be healthy
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - --kubeconfig
+          - '{{ longhorn_kubeconfig }}'
+          - --context
+          - '{{ longhorn_host_kubernetes_context }}'
+          - --namespace=kube-system
+          - rollout
+          - status
+          - daemonset/cilium
+          - --timeout=30s
+      changed_when: false
+      no_log: true
+
+    - name: Read current Flux reconciliation conditions
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - --kubeconfig
+          - '{{ longhorn_kubeconfig }}'
+          - --context
+          - '{{ longhorn_host_kubernetes_context }}'
+          - --namespace=flux-system
+          - get
+          - kustomizations.kustomize.toolkit.fluxcd.io
+          - -o=json
+      changed_when: false
+      register: longhorn_flux
+      no_log: true
+
+    - name: Refuse an absent Flux reconciliation set
+      ansible.builtin.assert:
+        that:
+          - (longhorn_flux.stdout | from_json)['items'] | length > 0
+      no_log: true
+
+    - name: Refuse unhealthy or stale Flux reconciliation
+      ansible.builtin.assert:
+        that:
+          - >-
+            (item.status.conditions | selectattr('type', 'equalto', 'Ready')
+            | selectattr('status', 'equalto', 'True')
+            | selectattr('observedGeneration', 'equalto', item.metadata.generation)
+            | list | length) == 1
+      loop: "{{ (longhorn_flux.stdout | from_json)['items'] }}"
+      no_log: true
+
+    - name: Require native health without an e2e workload or configuration change
+      ansible.builtin.command:
+        argv:
+          - talosctl
+          - --talosconfig
+          - '{{ longhorn_talosconfig }}'
+          - --endpoints
+          - '{{ item.address }}'
+          - --nodes
+          - '{{ item.address }}'
+          - health
+          - --server=false
+          - --control-plane-nodes
+          - '{{ longhorn_host_nodes | map(attribute="address") | join(",") }}'
+          - --wait-timeout=30s
+          - --k8s-endpoint
+          - '{{ longhorn_host_api_server }}'
+      environment:
+        KUBECONFIG: '{{ longhorn_kubeconfig }}'
+      loop: '{{ longhorn_host_nodes | selectattr("name", "equalto", longhorn_host_target) | list }}'
+      changed_when: false
+      no_log: true
+
+    - name: Ask only the selected node for the committed kubelet conversion preview
+      # Native diff may contain machine credentials. Never expose or save it.
+      ansible.builtin.command:
+        argv:
+          - talosctl
+          - --talosconfig
+          - '{{ longhorn_talosconfig }}'
+          - --endpoints
+          - '{{ item.address }}'
+          - --nodes
+          - '{{ item.address }}'
+          - patch
+          - machineconfig
+          - --mode=auto
+          - --dry-run
+          - --patch
+          - >-
+            {{ lookup('ansible.builtin.file', longhorn_patch_file)
+            | replace('${kubernetes_version}', 'v1.37.0') }}
+      loop: '{{ longhorn_host_nodes | selectattr("name", "equalto", longhorn_host_target) | list }}'
+      changed_when: false
+      no_log: true
+
+    - name: Report only the preview boundary
+      ansible.builtin.debug:
+        msg: >-
+          One native kubelet prerequisite preview passed. Nothing was applied,
+          upgraded, labeled, registered, or activated. A separately reviewed
+          full-config comparison and host delivery are still required.

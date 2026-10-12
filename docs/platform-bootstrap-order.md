@@ -20,7 +20,11 @@ to recover a lower layer.
 An empty, namespace-scoped ESO controller can be installed independently before
 storage or OpenBao. The [controller-only PoC](../platform/external-secrets/README.md)
 does exactly that; it does not move real secret-store integration ahead of its
-dependencies. Persistent storage is still undecided and OpenBao is not deployed.
+dependencies. Longhorn V1 on the existing OS filesystem is the selected storage
+direction; its [preparation](../platform/longhorn/README.md) is disconnected and
+suspended pending compatibility, host prerequisites, and a reviewed activation.
+The earlier Rook/Ceph preparation is an alternative, not an activation dependency.
+OpenBao is not deployed.
 Etcd backup work is deferred, not completed, and remains inactive.
 
 ## Why Cilium precedes Flux
@@ -72,6 +76,12 @@ persistent OpenBao or make a separately reviewed cluster-version decision.
 ESO 2.11 likewise publishes support through Kubernetes 1.36. The operator
 accepted a controller-only PoC on 1.37 on 2026-10-07, without secret stores or
 real credentials. Passing static checks is not a runtime compatibility result.
+
+Longhorn 1.13 publishes a tested Kubernetes matrix through 1.36 and a verified
+Talos release of 1.13.4. Its Talos integration guide is not evidence that this
+cluster's exact 1.14.1/1.37.0 combination has been tested. Activation needs a
+separately recorded PoC risk acceptance or a supported-version decision; no
+implicit Kubernetes downgrade or Talos upgrade is authorized.
 
 ## OpenBao and SOPS rules
 
