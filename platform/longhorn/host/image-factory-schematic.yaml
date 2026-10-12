@@ -1,0 +1,7 @@
+# Candidate only. Merge with any existing customizations; do not replace them.
+# Generating a schematic and rolling the image out belong to reviewed automation.
+customization:
+  systemExtensions:
+    officialExtensions:
+      - siderolabs/iscsi-tools
+      - siderolabs/util-linux-tools

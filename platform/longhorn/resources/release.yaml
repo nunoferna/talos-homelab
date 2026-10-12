@@ -1,0 +1,111 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: longhorn
+  namespace: longhorn-system
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  # Preparation only: also absent from clusters/homelab.
+  suspend: true
+  interval: 10m
+  timeout: 10m
+  releaseName: longhorn
+  chart:
+    spec:
+      chart: longhorn
+      version: 1.13.0
+      sourceRef:
+        kind: HelmRepository
+        name: longhorn
+  install:
+    remediation:
+      retries: 0
+  upgrade:
+    remediation:
+      retries: 0
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: CustomResourceDefinition
+            patch: |-
+              - op: add
+                path: /metadata/annotations/helm.sh~1resource-policy
+                value: keep
+  values:
+    global:
+      nodeSelector:
+        homelab.storage/longhorn: 'true'
+    persistence:
+      # A separately retained, non-default StorageClass is Git-managed.
+      createStorageClass: false
+      defaultClass: false
+    defaultSettings:
+      v1DataEngine: true
+      v2DataEngine: false
+      defaultDataPath: /var/lib/longhorn
+      # No disk registration until the private inventory labels approved nodes.
+      createDefaultDiskLabeledNodes: true
+      systemManagedComponentsNodeSelector: homelab.storage/longhorn:true
+      storageReservedPercentageForDefaultDisk: 30
+      storageOverProvisioningPercentage: 100
+      storageMinimalAvailablePercentage: 25
+      defaultReplicaCount: 3
+      replicaSoftAntiAffinity: false
+      replicaDiskSoftAntiAffinity: false
+      allowVolumeCreationWithDegradedAvailability: false
+      concurrentReplicaRebuildPerNodeLimit: 1
+      replicaAutoBalance: disabled
+      snapshotMaxCount: 8
+      snapshotCountWarningThreshold: 6
+      deletingConfirmationFlag: false
+      upgradeChecker: false
+      allowCollectingLonghornUsageMetrics: false
+      # Keep the upstream V1 CPU reservation explicit; benchmark with etcd.
+      guaranteedInstanceManagerCPU: '{"v1":"12","v2":"12"}'
+    defaultBackupStore:
+      backupTarget: ''
+      backupTargetCredentialSecret: ''
+      pollInterval: 0
+    preUpgradeChecker:
+      jobEnabled: false
+      upgradeVersionCheck: true
+    csi:
+      allowControllerSecretAccess: false
+      volumeGroupSnapshotEnabled: false
+    longhornManager:
+      resources:
+        requests:
+          cpu: 200m
+          memory: 256Mi
+        limits:
+          memory: 1Gi
+    longhornGlobalManager:
+      replicas: 3
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          memory: 512Mi
+      podDisruptionBudget:
+        enabled: true
+        minAvailable: 2
+    longhornUI:
+      replicas: 1
+    service:
+      ui:
+        type: ClusterIP
+      manager:
+        type: ClusterIP
+    ingress:
+      enabled: false
+    httproute:
+      enabled: false
+    # The upstream distro presets do not model Talos; use the candidate CNP.
+    networkPolicies:
+      enabled: false
+    metrics:
+      serviceMonitor:
+        enabled: false
