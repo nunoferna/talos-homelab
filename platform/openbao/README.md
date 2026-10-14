@@ -61,7 +61,7 @@ once it serves data.
    the service/pod DNS names and 127.0.0.1 for local verified bootstrap.
 3. Activate this module, its private inputs and HelmRelease through reviewed Git.
 4. Initialize/unseal using protected local operator material, then connect the
-   existing ESO controller with namespace/SA-bound auth and an exact test path.
+   existing ESO controller with namespace/SA-bound auth and narrow permissions.
 
 Helm installs OpenBao but does not initialize or unseal it. disableWait permits
 installation of a sealed server; Helm Ready is not application readiness.
@@ -74,10 +74,8 @@ Kubernetes cannot name-restrict ordinary create. Later writes/read are restricte
 to openbao-site/openbao-tls, with no delete/list/watch. No cluster-admin grant or
 change to the existing proof role.
 
-CI checks the official archive checksum, actual Helm/post-rendered output,
-retention, private input scope and native Talos validation. Archive verification
-is not runtime Flux digest enforcement; rendering does not certify version
-compatibility. Before activation rollback is reverting preparation. After
+This configuration does not certify runtime/version compatibility. Before
+activation rollback is reverting preparation. After
 activation, do not delete the namespace, PVC/PV, directory or a serving mount.
 
 [Official Helm installation and initialization](https://openbao.org/docs/platform/k8s/helm/run/)
