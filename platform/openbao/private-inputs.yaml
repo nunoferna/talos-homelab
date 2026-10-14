@@ -1,0 +1,61 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: openbao-inputs-reconciler
+  namespace: flux-system
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: openbao-inputs-reconciler
+  namespace: openbao
+rules:
+  # Ordinary create cannot be name-restricted. Later writes are exact-name only.
+  - apiGroups: ['']
+    resources: [configmaps, secrets]
+    verbs: [create]
+  - apiGroups: ['']
+    resources: [configmaps]
+    resourceNames: [openbao-site]
+    verbs: [get, patch, update]
+  - apiGroups: ['']
+    resources: [secrets]
+    resourceNames: [openbao-tls]
+    verbs: [get, patch, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: openbao-inputs-reconciler
+  namespace: openbao
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: openbao-inputs-reconciler
+subjects:
+  - kind: ServiceAccount
+    name: openbao-inputs-reconciler
+    namespace: flux-system
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: openbao-inputs
+  namespace: flux-system
+spec:
+  suspend: true
+  interval: 1m
+  path: ./clusters/homelab/openbao/inputs
+  sourceRef:
+    kind: GitRepository
+    name: homelab-private
+  serviceAccountName: openbao-inputs-reconciler
+  decryption:
+    provider: sops
+    secretRef:
+      name: sops-age
+  prune: false
+  deletionPolicy: Orphan
+  force: false
+  wait: false

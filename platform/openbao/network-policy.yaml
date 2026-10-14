@@ -1,0 +1,40 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: openbao
+  namespace: openbao
+spec:
+  endpointSelector: {}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: external-secrets
+            k8s:io.cilium.k8s.policy.serviceaccount: external-secrets
+      toPorts:
+        - ports:
+            - port: '8200'
+              protocol: TCP
+    - fromEntities: [host, remote-node]
+      # Kubelet HTTPS health probes; not a general application trust grant.
+      toPorts:
+        - ports:
+            - port: '8200'
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s:k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: '53'
+              protocol: UDP
+            - port: '53'
+              protocol: TCP
+    - toEntities: [kube-apiserver]
+      toPorts:
+        - ports:
+            - port: '443'
+              protocol: TCP
+            - port: '6443'
+              protocol: TCP

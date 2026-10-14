@@ -1,0 +1,19 @@
+# Talos 1.14.1 opt-in schema conversion, not a standalone machine config.
+# Keep generated defaults; privately compare custom kubelet settings first.
+apiVersion: v1alpha1
+kind: KubeletConfig
+$patch: delete
+---
+machine:
+  kubelet:
+    image: ghcr.io/siderolabs/kubelet:${kubernetes_version}
+    defaultRuntimeSeccompProfileEnabled: true
+    disableManifestsDirectory: true
+    extraMounts:
+      - destination: /var/mnt/openbao-poc
+        source: /var/mnt/openbao-poc
+        type: bind
+        options:
+          - bind
+          - rshared
+          - rw

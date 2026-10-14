@@ -7,10 +7,10 @@ to recover a lower layer.
 2. **Flux** reconciles the public `clusters/homelab` root. A separate
    authenticated source may later reconcile sensitive resources from the
    private repository, but Flux never owns Cilium or its own day-zero install.
-3. **Persistent storage** supplies tested failure and snapshot semantics.
-4. **OpenBao** runs as a three-replica integrated-Raft service with TLS,
-   anti-affinity, a disruption budget, audit logging, and one persistent volume
-   per replica.
+3. **Persistent storage** supplies an explicit backing volume; it does not
+   require Longhorn/Ceph or automatic replication for every application.
+4. **OpenBao** uses TLS and its own chosen durable backend. The selected PoC is
+   one integrated-Raft instance on a retained node-local volume, not HA.
 5. **External Secrets Operator** authenticates to OpenBao using Kubernetes
    service accounts and namespace-scoped policies.
 6. **SOPS exceptions** cover only allowlisted bootstrap secrets that cannot be
@@ -20,8 +20,15 @@ to recover a lower layer.
 An empty, namespace-scoped ESO controller can be installed independently before
 storage or OpenBao. The [controller-only PoC](../platform/external-secrets/README.md)
 does exactly that; it does not move real secret-store integration ahead of its
-dependencies. Persistent storage is still undecided and OpenBao is not deployed.
-Etcd backup work is deferred, not completed, and remains inactive.
+dependencies. On 2026-10-14 the operator selected a single OpenBao instance on
+node-local persistent storage and deferred recovery work. The
+[OpenBao preparation](../platform/openbao/README.md) is disconnected/suspended,
+not deployed. Longhorn/Ceph preparation is not a prerequisite. Etcd backups,
+volume backups and restore drills remain deferred, not completed.
+
+Before real secrets, separately review availability, capacity, audit logging,
+operator access, key custody and recovery. The PoC currently promises none of
+the replication/failover/restore guarantees of a production platform.
 
 ## Why Cilium precedes Flux
 
@@ -76,9 +83,10 @@ real credentials. Passing static checks is not a runtime compatibility result.
 ## OpenBao and SOPS rules
 
 OpenBao must not depend on ESO or on secrets that only OpenBao can provide. Its
-initial TLS and initialization path must be recoverable independently. Store
-unseal/recovery material outside Git in at least two independently controlled
-encrypted locations.
+initial TLS and operating unseal keys must exist independently of OpenBao and
+outside Git. The selected PoC uses the protected Mac for required operator
+material without starting a backup project. Independent recovery copies remain
+a gate before real secrets, not an activation requirement for disposable tests.
 
 The SOPS allowlist should normally be limited to bootstrap credentials for
 storage, networking, or secret-store initialization when no workload identity

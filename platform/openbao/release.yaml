@@ -1,0 +1,170 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: openbao
+  namespace: openbao
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  suspend: true
+  interval: 10m
+  timeout: 5m
+  releaseName: openbao
+  valuesFrom:
+    - kind: ConfigMap
+      name: openbao-site
+      valuesKey: values.yaml
+  chart:
+    spec:
+      chart: openbao
+      version: 0.30.3
+      sourceRef:
+        kind: HelmRepository
+        name: openbao
+  install:
+    # Normal OpenBao starts sealed. Helm success is NOT unsealed readiness.
+    disableWait: true
+    remediation:
+      retries: 0
+  upgrade:
+    disableWait: true
+    remediation:
+      retries: 0
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              group: apps
+              version: v1
+              kind: StatefulSet
+              name: openbao
+            # The one chart correction retained: verified CLI readiness.
+            patch: |-
+              - op: replace
+                path: /spec/template/spec/containers/0/readinessProbe/exec/command
+                value: [/bin/sh, -ec, bao status]
+  values:
+    global:
+      tlsDisable: false
+    injector:
+      enabled: false
+    csi:
+      enabled: false
+    server:
+      standalone:
+        enabled: true
+        config: |
+          ui = false
+          disable_mlock = true
+          api_addr = "https://openbao.openbao.svc:8200"
+          cluster_addr = "https://openbao-0.openbao-internal.openbao.svc:8201"
+          listener "tcp" {
+            address = "[::]:8200"
+            cluster_address = "[::]:8201"
+            tls_cert_file = "/openbao/tls/tls.crt"
+            tls_key_file = "/openbao/tls/tls.key"
+            tls_min_version = "tls12"
+            tls_auto_reload = true
+          }
+          storage "raft" {
+            path = "/openbao/data"
+            node_id = "openbao-0"
+          }
+      ha:
+        enabled: false
+        apiAddr: https://openbao.openbao.svc:8200
+        clusterAddr: https://openbao-0.openbao-internal.openbao.svc:8201
+      authDelegator:
+        enabled: false
+      serviceAccount:
+        serviceDiscovery:
+          enabled: false
+      dataStorage:
+        enabled: true
+        size: 2Gi
+        storageClass: openbao-local
+      persistentVolumeClaimRetentionPolicy:
+        whenDeleted: Retain
+        whenScaled: Retain
+      livenessProbe:
+        enabled: true
+        # Do not restart-loop a sealed or uninitialized server.
+        path: /v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204
+      extraEnvironmentVars:
+        BAO_CACERT: /openbao/tls/ca.crt
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+        - name: tls
+          secret:
+            secretName: openbao-tls
+            defaultMode: 288  # 0440, readable by the pod's filesystem group.
+      volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: tls
+          mountPath: /openbao/tls
+          readOnly: true
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 1Gi
+      statefulSet:
+        securityContext:
+          pod:
+            runAsNonRoot: true
+            runAsUser: 100
+            runAsGroup: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          container:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+    # Native chart feature, not a custom storage controller/provisioner.
+    extraObjects:
+      - apiVersion: storage.k8s.io/v1
+        kind: StorageClass
+        metadata:
+          name: openbao-local
+          annotations:
+            storageclass.kubernetes.io/is-default-class: 'false'
+            helm.sh/resource-policy: keep
+        provisioner: kubernetes.io/no-provisioner
+        volumeBindingMode: WaitForFirstConsumer
+        reclaimPolicy: Retain
+        allowVolumeExpansion: false
+      - apiVersion: v1
+        kind: PersistentVolume
+        metadata:
+          name: openbao-local-data
+          annotations:
+            helm.sh/resource-policy: keep
+        spec:
+          capacity:
+            storage: 2Gi
+          volumeMode: Filesystem
+          accessModes: [ReadWriteOnce]
+          persistentVolumeReclaimPolicy: Retain
+          storageClassName: openbao-local
+          claimRef:
+            namespace: openbao
+            name: data-openbao-0
+          local:
+            path: /var/mnt/openbao-poc
+          nodeAffinity:
+            required:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - key: kubernetes.io/hostname
+                      operator: In
+                      values:
+                        - >-
+                          {{ required "Set the private storage node"
+                          (index .Values.server.nodeSelector "kubernetes.io/hostname") }}
