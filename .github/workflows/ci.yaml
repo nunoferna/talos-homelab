@@ -103,9 +103,11 @@ jobs:
           OPENBAO_CHECK_DIR: ${{ runner.temp }}/openbao-offline-check
         run: |
           mkdir -p "$OPENBAO_CHECK_DIR"
-          HELM_REPOSITORY_CACHE="$OPENBAO_CHECK_DIR/cache" \
-            helm pull openbao --repo https://openbao.github.io/openbao-helm \
-              --version 0.30.3 --destination "$OPENBAO_CHECK_DIR"
+          export HELM_REPOSITORY_CACHE="$OPENBAO_CHECK_DIR/cache"
+          export HELM_REPOSITORY_CONFIG="$OPENBAO_CHECK_DIR/repositories.yaml"
+          helm repo add openbao https://openbao.github.io/openbao-helm
+          helm pull openbao/openbao --version 0.30.3 \
+            --destination "$OPENBAO_CHECK_DIR"
           curl --fail --silent --show-error --location \
             https://github.com/siderolabs/talos/releases/download/v1.14.1/talosctl-linux-amd64 \
             --output "$OPENBAO_CHECK_DIR/talosctl"
