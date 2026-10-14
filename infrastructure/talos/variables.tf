@@ -1,3 +1,18 @@
+variable "openbao_local_storage_node" {
+  description = "Opt in one inventory node to the OpenBao-only local bind mount and Talos 1.14.1 legacy kubelet schema. Empty disables it. Rendering only."
+  type        = string
+  default     = ""
+  nullable    = false
+
+  validation {
+    condition = var.openbao_local_storage_node == "" || (
+      contains(keys(yamldecode(file(var.inventory_file)).homelab.nodes), var.openbao_local_storage_node) &&
+      yamldecode(file(var.inventory_file)).homelab.talos.version == "v1.14.1"
+    )
+    error_message = "Choose one existing inventory node on the reviewed Talos v1.14.1 release, or leave empty."
+  }
+}
+
 variable "enable_etcd_backup_api_access" {
   description = "Opt in to namespace-scoped, snapshot-only Talos API access. Rendering only; reviewed node delivery is separate."
   type        = bool

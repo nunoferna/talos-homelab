@@ -64,6 +64,7 @@ jobs:
           tests/recovery_poc.py
           tests/private_sync.py
           tests/external_secrets.py
+          tests/openbao_poc.py
       - name: Reject plaintext public Secrets
         run: python tests/public_manifests.py
       - name: Render the public Flux root
@@ -97,6 +98,26 @@ jobs:
         env:
           ESO_CHART_ARCHIVE: ${{ runner.temp }}/eso-offline-check/external-secrets.tgz
         run: python tests/external_secrets.py
+      - name: Download the pinned OpenBao chart and native Talos validation client
+        env:
+          OPENBAO_CHECK_DIR: ${{ runner.temp }}/openbao-offline-check
+        run: |
+          mkdir -p "$OPENBAO_CHECK_DIR"
+          curl --fail --silent --show-error --location \
+            https://github.com/openbao/openbao-helm/releases/download/openbao-0.30.3/openbao-0.30.3.tgz \
+            --output "$OPENBAO_CHECK_DIR/openbao.tgz"
+          curl --fail --silent --show-error --location \
+            https://github.com/siderolabs/talos/releases/download/v1.14.1/talosctl-linux-amd64 \
+            --output "$OPENBAO_CHECK_DIR/talosctl"
+          printf '%s  %s\n' \
+            '7233ece94c94296a033a6ddb5efe0baf508a94c71de7e6c7b286500705924208' \
+            "$OPENBAO_CHECK_DIR/talosctl" | sha256sum --check --strict
+          chmod 0755 "$OPENBAO_CHECK_DIR/talosctl"
+      - name: Validate disconnected OpenBao and least-privilege ESO preparation offline
+        env:
+          OPENBAO_CHART_ARCHIVE: ${{ runner.temp }}/openbao-offline-check/openbao.tgz
+          TALOSCTL: ${{ runner.temp }}/openbao-offline-check/talosctl
+        run: python tests/openbao_poc.py
       - name: Exercise native preview guards with synthetic client doubles
         run: bash tests/backup_access_preview.sh
 

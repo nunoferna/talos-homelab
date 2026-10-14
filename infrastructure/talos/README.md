@@ -17,6 +17,12 @@ requires OpenTofu 1.12.6 because state and plan encryption are enforced.
   `platform-backup`. It renders configuration only, without delivering it to
   nodes. See the staged [backup runbook](../../platform/backup/talos/README.md)
   before enabling it; this flag alone does not establish backups.
+- `openbao_local_storage_node`: optional, defaults to empty/off. Selects one
+  existing inventory node on Talos 1.14.1 for the narrow OpenBao directory bind
+  mount and opt-in legacy kubelet schema conversion. Rendering only; compare
+  custom kubelet settings and obtain separate node-delivery approval. See the
+  [OpenBao host boundary](../../platform/openbao/README.md). No disk provisioning,
+  extension/image change or backup access is implied.
 
 Relative inventory paths are resolved from the process working directory. An
 absolute path is clearer for operator and CI usage.

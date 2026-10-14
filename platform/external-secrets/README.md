@@ -79,9 +79,11 @@ from cascading deletion and CRDs have Helm's `keep` annotation. Rollback does
 not remove CRDs or any persisted custom resources. Never delete CRDs as a
 routine rollback: doing so deletes their custom resources cluster-wide.
 
-Next: decide and validate persistent storage without modifying the Talos OS
-disk in place, then review persistent OpenBao with TLS and independent recovery
-material. Only afterwards review ESO admission validation/certificate RBAC,
-application namespace scope, dedicated Kubernetes-auth service accounts,
-least-privilege TokenRequest/Bao policies and explicit Bao network access.
+Next: the [node-local OpenBao PoC](../openbao/README.md) prepares TLS, one
+persistent volume and a dedicated Kubernetes-auth identity for the existing
+namespace only. Its adapter remains disconnected/suspended, so the live empty
+controller configuration is unchanged. It does not require Longhorn or activate
+deferred recovery. Before real application namespaces/secrets, separately review
+ESO admission validation/certificate RBAC, compatibility, operator access and
+independent recovery. Provider/auth/refresh acceptance must use test values only.
 SOPS remains an exception for bootstrap inputs that cannot come from OpenBao.

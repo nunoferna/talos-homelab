@@ -1,0 +1,26 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: homelab-openbao
+  namespace: flux-system
+spec:
+  interval: 1m
+  url: ${PRIVATE_GITOPS_URL}
+  ref:
+    branch: main
+  secretRef:
+    name: flux-private-repo
+  ignore: |
+    /*
+    !/clusters
+    /clusters/*
+    !/clusters/homelab
+    /clusters/homelab/*
+    !/clusters/homelab/openbao
+    /clusters/homelab/openbao/**/*.md
+    !/secrets
+    /secrets/*
+    !/secrets/openbao
+    /secrets/openbao/*
+    !/secrets/openbao/kustomization.yaml
+    !/secrets/openbao/openbao-tls.sops.yaml
