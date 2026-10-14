@@ -79,10 +79,10 @@ from cascading deletion and CRDs have Helm's `keep` annotation. Rollback does
 not remove CRDs or any persisted custom resources. Never delete CRDs as a
 routine rollback: doing so deletes their custom resources cluster-wide.
 
-Next: the [node-local OpenBao PoC](../openbao/README.md) prepares TLS, one
-persistent volume and a dedicated Kubernetes-auth identity for the existing
-namespace only. Its adapter remains disconnected/suspended, so the live empty
-controller configuration is unchanged. It does not require Longhorn or activate
+Next: install the [node-local OpenBao PoC](../openbao/README.md) from its official
+Helm repository. Configure the bounded ESO adapter only after OpenBao is healthy;
+no speculative adapter permissions are installed, and the live empty controller
+configuration is unchanged. This does not require Longhorn or activate
 deferred recovery. Before real application namespaces/secrets, separately review
 ESO admission validation/certificate RBAC, compatibility, operator access and
 independent recovery. Provider/auth/refresh acceptance must use test values only.

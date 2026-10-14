@@ -1,148 +1,83 @@
-# OpenBao + ESO: node-local persistent PoC
+# OpenBao: official Helm chart, persistent single-instance PoC
 
-Selected scope: one normal OpenBao server, one retained node-local volume, TLS,
-and a namespace-scoped ESO test. No Longhorn, Ceph, PostgreSQL, dev mode,
-auto-unseal service, snapshot jobs, backup credentials, repartitioning or OS
-upgrade. This is disposable-test data only, not an HA or recoverable platform.
+OpenBao is installed from its [official Helm repository](https://openbao.github.io/openbao-helm)
+using one Flux HelmRepository and HelmRelease. No custom operator or copied
+StatefulSet. Chart 0.30.3 pins OpenBao 2.7.1; omitted values use that exact chart's
+defaults. No Longhorn, Ceph, PostgreSQL, dev mode or backup automation.
 
-## This PR does not deploy
+## Small GitOps structure
 
-`platform/openbao` is not referenced by `clusters/homelab`. The server
-Kustomization, HelmRelease, private TLS input reconciliation and ESO adapter are
-also suspended. Merging prepares code only. Existing ESO and its empty-controller
-RBAC/network policy remain unchanged. Do not merge the alternative storage PRs
-as dependencies of this design. Do not broaden the existing private proof role.
+- namespace.yaml: retained restricted namespace.
+- source.yaml and release.yaml: official repository and chart values.
+- network-policy.yaml: private API, DNS/API dependencies and node health probes.
+- private-inputs.yaml: reuse the existing homelab-private Git source to deliver
+  site values and encrypted TLS into openbao, with one namespace-scoped identity.
+- kustomization.yaml: assemble the module.
 
-OpenBao chart 0.30.3 / application 2.7.1 is pinned. Official archive SHA-256:
-`d50ed31b8305f430df308c342dd3c1efa877222380e99cb480f74f070d6beaa8`.
-CI checks the actual chart with Helm 4.3.0 and validates the host patch with
-Talos 1.14.1. The CI archive checksum is not runtime Flux digest enforcement;
-application image tags are version-pinned, not digest-pinned. A successful
-render is not a tested Kubernetes compatibility
-guarantee. The previous empty ESO PoC acceptance is not proof that its provider
-integration works; prove TLS, auth, policy and refresh using only the fixture.
+The module is not referenced by clusters/homelab. The release and private inputs
+remain suspended. Merging installs nothing. Existing ESO and the private proof
+role are unchanged. Configure the ESO adapter only after OpenBao is running;
+the speculative adapter, new Git source and multiple phase bridges were removed.
 
-## Host and volume
+## Only necessary values
 
-Private inputs choose exactly one existing inventory node. OpenTofu's
-`openbao_local_storage_node` defaults to empty (off). When selected, only that
-node receives the `/var/mnt/openbao-poc` bind mount. Talos 1.14.1 mounts the
-parent `/var/mnt` read-only in kubelet; directory-backed storage on the existing
-filesystem therefore needs this narrow writable exception. Native kubelet
-startup creates the source directory. No hostPath helper, privileged pod or
-new partition is needed. The local PV's normal filesystem group handling must
-be verified at runtime, not assumed from a Bound claim.
+The private openbao-site ConfigMap supplies server.nodeSelector through Helm
+valuesFrom. The official chart's extraObjects feature creates the non-default
+local StorageClass and retained PV, using the same node selector for PV affinity.
+The 2 GiB PV is reserved for openbao/data-openbao-0. keep annotations preserve
+the PV/class on Helm deletion; the StatefulSet also retains its PVC.
 
-The Talos generator uses a `KubeletConfig` document whose `ExtraMounts()` is
-empty. The opt-in patch removes that document and reproduces its defaults in
-the still-supported legacy schema, preserving the kubelet image, runtime
-seccomp and disabled static manifest directory. This is a **schema conversion**,
-not an additive patch: privately compare current and candidate full configs,
-preserve custom settings/mounts and obtain a reviewed plan before delivery.
+**A directory PV does not enforce a 2 GiB quota.** It shares the OS/etcd disk.
+Keep data small. Node outage means downtime; disk loss loses data. Do not change
+the node value to relocate existing data or uninstall as routine rollback.
 
-Runtime: OpenTofu 1.12.6, Talos provider 0.12.0, existing encrypted R2 Talos
-state; local protected Mac credentials. Backend, identity/bootstrap addresses,
-installer image and other node configs must remain unchanged. Do not enable
-deferred backup API access. Native validation commands:
+The other overrides enable TLS, one-member Raft, bounded resources, restricted
+container settings and sealed-safe health behavior. API addresses use chart
+values, not a custom renderer. One small post-render corrects the upstream
+readiness command to verify TLS. The chart needs writable temporary storage
+while its root filesystem is read-only. The API/UI is not exposed publicly.
 
-```sh
-tofu fmt -check -diff -recursive infrastructure
-tofu -chdir=infrastructure/talos init -backend=false -input=false
-tofu -chdir=infrastructure/talos validate
-```
+## Host prerequisite, unchanged
 
-An eventual encrypted `plan -out` needs private inputs and a one-node config
-delta review. Applying rendered outputs does not deliver them to a node. Keep
-delivery separately approved and code-driven with native dry-run, try-mode and
-API/etcd/Cilium/Flux checks. No direct manual node-mutation commands are required
-by this preparation. Native try-mode behavior must be checked before use; do
-not infer that a schema conversion is safely hot-reloadable.
+Talos 1.14.1 exposes /var/mnt read-only to kubelet. The default-off OpenTofu input
+openbao_local_storage_node adds only /var/mnt/openbao-poc on one selected node.
+It requires a legacy kubelet schema conversion: compare private full configs
+and preserve any custom settings before delivery. No repartitioning, extension,
+installer change, OS upgrade or backup API access is needed.
 
-The non-default `openbao-local` class has no provisioner. Its pre-reserved 2 GiB
-PV serves only `openbao/data-openbao-0`, with hard node affinity. PV, PVC and
-namespace retention are deliberate. **2 GiB is a binding declaration, not an
-enforced directory quota**; data shares the OS/etcd filesystem. Keep writes tiny
-and inspect disk growth. Node outage makes OpenBao unavailable; disk loss loses
-its data. Do not change the private node setting to relocate existing data.
+Use the existing OpenTofu 1.12.6 / Talos provider 0.12.0 encrypted R2 root and
+protected Mac credentials. Identity/bootstrap and other nodes must stay unchanged.
+See [the Talos root](../../infrastructure/talos/README.md) for validation/plan
+commands. Rendering/state apply does not deliver config. Keep native dry-run,
+reviewed plan and one-node delivery approval separate. Do not remove the mount
+once it serves data.
 
-## OpenBao bootstrap
+## Bootstrap, then ESO
 
-The server is non-root, drops capabilities, uses runtime seccomp and a
-read-only root filesystem. It has no injector, CSI driver, ingress, UI service,
-automated snapshots or Kubernetes Secret-reading role. Its Kubernetes role
-permits only TokenReview creation for authentication. Mount a private
-`openbao-tls` Secret containing `tls.crt`, `tls.key`, `ca.crt`; the CA private
-key must not be included. Required certificate SANs include the OpenBao service
-and pod DNS names and 127.0.0.1 for the protected local bootstrap tunnel.
-Put the public CA certificate in `external-secrets/openbao-ca` as `ca.crt`.
+1. Review and deliver the one-node mount through code.
+2. Add private site values and an encrypted openbao-tls Secret in
+   clusters/homelab/openbao/inputs of the private repository. It needs tls.crt,
+   tls.key and ca.crt, never the CA private key. Certificate SANs must include
+   the service/pod DNS names and 127.0.0.1 for local verified bootstrap.
+3. Activate this module, its private inputs and HelmRelease through reviewed Git.
+4. Initialize/unseal using protected local operator material, then connect the
+   existing ESO controller with namespace/SA-bound auth and an exact test path.
 
-TLS is an unavoidable bootstrap input, not a new recovery project. Use a
-reviewed private SOPS exception and the existing Flux age identity; no private
-key or root token goes in public Git, Helm values or a ConfigMap. The dedicated
-private input role can create Secrets only in `openbao` and ConfigMaps only in
-`external-secrets`; ordinary create cannot be name-restricted by Kubernetes.
-Subsequent read/update/patch is name-restricted, with no delete/list/watch.
-Do not turn that role into cluster-admin or expand the proof reconciler.
+Helm installs OpenBao but does not initialize or unseal it. disableWait permits
+installation of a sealed server; Helm Ready is not application readiness.
+OnDelete uses the chart default: future pod replacement must account for unseal.
+No root token, unseal key or real application secret belongs in Git or Helm values.
+TLS/init/unseal automation is not implemented by this preparation.
 
-OpenBao starts **sealed/uninitialized**. Helm uses disableWait only to allow
-installation of a normally sealed server, with zero remediation retries; Helm
-Ready does not prove application readiness. Readiness remains false while
-sealed. Liveness accepts sealed/uninitialized responses to avoid a restart loop.
-OnDelete prevents an automatic update from silently resealing this single pod;
-upgrades require a separate reviewed pod-replacement operation and unseal.
+The private input identity can create ConfigMaps/Secrets only in openbao;
+Kubernetes cannot name-restrict ordinary create. Later writes/read are restricted
+to openbao-site/openbao-tls, with no delete/list/watch. No cluster-admin grant or
+change to the existing proof role.
 
-Initialization/unseal material remains necessary to operate OpenBao, even
-without backups. Keep it outside Git on the protected Mac; do not auto-init,
-auto-unseal, embed root credentials in Jobs or log responses. Use reviewed
-operator automation for initialization/unseal and the API configuration below.
-Those secret-generating operator steps are not implemented or run by this PR.
-TLS inputs, host delivery and unseal must pass before server/adapter activation.
+CI checks the official archive checksum, actual Helm/post-rendered output,
+retention, private input scope and native Talos validation. Archive verification
+is not runtime Flux digest enforcement; rendering does not certify version
+compatibility. Before activation rollback is reverting preparation. After
+activation, do not delete the namespace, PVC/PV, directory or a serving mount.
 
-## ESO adapter and acceptance
-
-The existing controller still reconciles only `external-secrets`. The adapter
-adds one named TokenRequest permission for `eso-openbao-poc`, not a cluster-wide
-grant. ESO uses a short-lived service-account JWT with audience `openbao-poc`,
-the `kubernetes-poc` auth mount, and the dedicated role in
-`configuration/eso-poc-role.json`. OpenBao validates JWTs through TokenReview
-using its locally projected reviewer identity, not a long-lived reviewer token
-in Git. Configure the API host from the in-cluster Kubernetes service and CA.
-
-Reviewed operator configuration must enable `kv` as KV v2 and `kubernetes-poc`
-as Kubernetes auth, install `configuration/eso-poc-policy.hcl` and the role,
-then seed only `kv/poc/eso-demo` with the known non-secret message
-`gitops-openbao-eso-poc-v1`. The role can read exactly that data path, without
-list, write or default-policy access. Do not give ESO a root token.
-
-Cilium allows the controller identity to reach the OpenBao identity on TCP
-8200, with DNS/API dependencies and node health probes. No `world` rule or
-application namespace access. Node-origin ingress is broader than probe-only
-authentication; Cilium's local-host exemption also remains a documented limit.
-TLS/auth/ACL enforce the API boundary. Native OpenBao/Vault API compatibility
-is documented by ESO, but these exact versions still require runtime testing.
-
-Acceptance: host directory writable without changing other nodes; PVC bound to
-the reserved PV; server initialized/unsealed; TLS verified (no skip-verify);
-SecretStore and ExternalSecret Ready; fixture consumer verifies the expected
-value without logging it; another path and another SA/namespace are denied;
-refresh reflects a reviewed fixture update. Pod-replacement persistence and
-re-unseal need a separately approved test, not a claim inferred from PV binding.
-The fixture consumer and mutation-test automation remain a later activation step.
-
-## Rollback
-
-Before activation, revert preparation: it owns nothing live. After activation,
-suspend reconciliation to stop new changes; suspension does not stop running
-OpenBao. Do not uninstall the chart, delete PVC/PV/namespace, wipe its directory
-or remove a bind mount serving existing data. Keep approved configs and plan
-checksums. Any host rollback or storage removal needs explicit review; retained
-volumes are not backups and this design intentionally has no restore promise.
-
-## References
-
-- [Talos local storage](https://docs.siderolabs.com/kubernetes-guides/csi/local-storage)
-- [Version-pinned kubelet mounts](https://github.com/siderolabs/talos/blob/v1.14.1/internal/app/machined/pkg/system/services/kubelet.go)
-- [OpenBao Helm](https://openbao.org/docs/platform/k8s/helm/run/)
-- [OpenBao Raft](https://openbao.org/docs/configuration/storage/raft/)
-- [ESO OpenBao compatibility](https://external-secrets.io/latest/provider/openbao/)
-- [Kubernetes authentication](https://openbao.org/docs/auth/kubernetes/)
+[Official Helm installation and initialization](https://openbao.org/docs/platform/k8s/helm/run/)

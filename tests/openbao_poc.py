@@ -1,7 +1,6 @@
 """Offline OpenBao/local-storage/ESO preparation; no live credentials or APIs."""
 
 import hashlib
-import json
 import os
 from pathlib import Path
 import subprocess
@@ -36,11 +35,11 @@ def known_values(overrides, defaults):
 class OpenBaoPoCTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.foundation = render("platform/openbao/foundation")
-        cls.server = render("platform/openbao/server")
-        cls.adapter = render("platform/openbao/eso")
+        cls.foundation = render("platform/openbao")
+        cls.server = cls.foundation
+        cls.adapter = []
         cls.bridge = render("platform/openbao")
-        cls.private = render("platform/openbao/private-sync")
+        cls.private = cls.foundation
         cls.release = next(d for d in cls.server if d["kind"] == "HelmRelease")
         archive = Path(os.environ["OPENBAO_CHART_ARCHIVE"])
         if hashlib.sha256(archive.read_bytes()).hexdigest() != CHART_SHA256:
@@ -49,12 +48,14 @@ class OpenBaoPoCTests(unittest.TestCase):
             cls.metadata = yaml.safe_load(chart.extractfile("openbao/Chart.yaml"))
             defaults = yaml.safe_load(chart.extractfile("openbao/values.yaml"))
         known_values(cls.release["spec"]["values"], defaults)
+        values = yaml.safe_load(yaml.safe_dump(cls.release["spec"]["values"]))
+        values["server"]["nodeSelector"] = {"kubernetes.io/hostname": "fixture-node"}
         if run(["helm", "version", "--template", "{{.Version}}"]).split("+")[0] != "v4.3.0":
             raise ValueError("Use Helm 4.3.0 for this offline render")
         chart_yaml = run([
             "helm", "template", "openbao", str(archive), "--namespace", "openbao",
             "--kube-version", "1.37.0", "--skip-tests", "--values", "-",
-        ], input=yaml.safe_dump(cls.release["spec"]["values"]))
+        ], input=yaml.safe_dump(values))
         with tempfile.TemporaryDirectory(prefix="openbao-render-") as directory:
             root = Path(directory)
             (root / "chart.yaml").write_text(chart_yaml, encoding="utf-8")
@@ -72,9 +73,6 @@ class OpenBaoPoCTests(unittest.TestCase):
         self.assertNotIn("backup-sync", {d["metadata"]["name"] for d in root})
         self.assertNotIn("longhorn-system", {d["metadata"]["name"] for d in root})
         self.assertIs(self.release["spec"]["suspend"], True)
-        for name in ("openbao-server", "openbao-eso-poc"):
-            self.assertIs(next(d for d in self.bridge if d["metadata"]["name"] == name)
-                          ["spec"]["suspend"], True)
         inputs = next(d for d in self.private if d["metadata"]["name"] == "openbao-inputs"
                       and d["kind"] == "Kustomization")
         self.assertIs(inputs["spec"]["suspend"], True)
@@ -97,10 +95,9 @@ class OpenBaoPoCTests(unittest.TestCase):
         self.assertNotIn("seal ", hcl)
         self.assertNotIn("devRootToken", hcl)
         self.assertEqual({d["kind"] for d in self.chart},
-                         {"ServiceAccount", "ConfigMap", "Service", "StatefulSet"})
-        role = next(d for d in self.server if d["kind"] == "ClusterRole")
-        self.assertEqual(role["rules"], [{"apiGroups": ["authentication.k8s.io"],
-                                         "resources": ["tokenreviews"], "verbs": ["create"]}])
+                         {"ServiceAccount", "ConfigMap", "Service", "StatefulSet",
+                          "PersistentVolume", "StorageClass"})
+        self.assertNotIn("ClusterRole", {d["kind"] for d in self.server})
         for d in self.chart:
             if d["kind"] == "Service":
                 self.assertEqual(d["spec"].get("type", "ClusterIP"), "ClusterIP")
@@ -137,18 +134,22 @@ class OpenBaoPoCTests(unittest.TestCase):
                                  "restricted")
 
     def test_retained_prebound_directory_volume_not_default_or_quota(self):
-        sc = next(d for d in self.foundation if d["kind"] == "StorageClass")
+        sc = next(d for d in self.chart if d["kind"] == "StorageClass")
         self.assertEqual(sc["provisioner"], "kubernetes.io/no-provisioner")
         self.assertEqual(sc["volumeBindingMode"], "WaitForFirstConsumer")
         self.assertEqual(sc["reclaimPolicy"], "Retain")
         self.assertEqual(sc["metadata"]["annotations"]["storageclass.kubernetes.io/is-default-class"],
                          "false")
-        pv = next(d for d in self.server if d["kind"] == "PersistentVolume")
+        pv = next(d for d in self.chart if d["kind"] == "PersistentVolume")
         self.assertEqual(pv["spec"]["local"], {"path": "/var/mnt/openbao-poc"})
         self.assertEqual(pv["spec"]["claimRef"], {"namespace": "openbao", "name": "data-openbao-0"})
         self.assertEqual(pv["spec"]["persistentVolumeReclaimPolicy"], "Retain")
         expression, = pv["spec"]["nodeAffinity"]["required"]["nodeSelectorTerms"][0]["matchExpressions"]
-        self.assertEqual(expression["values"], ["${OPENBAO_STORAGE_NODE}"])
+        self.assertEqual(expression["values"], ["fixture-node"])
+        self.assertEqual(self.sts["spec"]["template"]["spec"]["nodeSelector"],
+                         {"kubernetes.io/hostname": "fixture-node"})
+        for d in (sc, pv):
+            self.assertEqual(d["metadata"]["annotations"]["helm.sh/resource-policy"], "keep")
         self.assertEqual(len(self.sts["spec"]["volumeClaimTemplates"]), 1)
         claim = self.sts["spec"]["volumeClaimTemplates"][0]
         self.assertEqual(claim["metadata"]["name"], "data")
@@ -157,26 +158,25 @@ class OpenBaoPoCTests(unittest.TestCase):
         self.assertEqual(self.sts["spec"]["persistentVolumeClaimRetentionPolicy"],
                          {"whenDeleted": "Retain", "whenScaled": "Retain"})
 
-    def test_bounded_eso_identity_auth_and_policy(self):
-        store = next(d for d in self.adapter if d["kind"] == "SecretStore")
-        self.assertEqual(store["metadata"]["namespace"], "external-secrets")
-        provider = store["spec"]["provider"]["vault"]
-        self.assertEqual(provider["server"], "https://openbao.openbao.svc:8200")
-        self.assertNotIn("tokenSecretRef", provider["auth"])
-        auth = provider["auth"]["kubernetes"]
-        self.assertEqual(auth["serviceAccountRef"],
-                         {"name": "eso-openbao-poc", "audiences": ["openbao-poc"]})
-        role = next(d for d in self.adapter if d["kind"] == "Role")
-        self.assertEqual(role["rules"], [{"apiGroups": [""], "resources": ["serviceaccounts/token"],
-                                         "resourceNames": ["eso-openbao-poc"], "verbs": ["create"]}])
-        bao_role = json.loads(Path("platform/openbao/configuration/eso-poc-role.json").read_text())
-        self.assertEqual(bao_role["bound_service_account_names"], ["eso-openbao-poc"])
-        self.assertEqual(bao_role["bound_service_account_namespaces"], ["external-secrets"])
-        self.assertIs(bao_role["token_no_default_policy"], True)
-        acl = Path("platform/openbao/configuration/eso-poc-policy.hcl").read_text()
-        self.assertNotIn("*", acl)
-        self.assertIn('path "kv/data/poc/eso-demo"', acl)
-        self.assertIn('capabilities = ["read"]', acl)
+    def test_official_helm_repo_and_existing_eso_unchanged(self):
+        source = next(d for d in self.server if d["kind"] == "HelmRepository")
+        self.assertEqual(source["spec"]["url"], "https://openbao.github.io/openbao-helm")
+        self.assertEqual(self.release["spec"]["chart"]["spec"]["sourceRef"],
+                         {"kind": "HelmRepository", "name": "openbao"})
+        self.assertEqual(self.release["spec"]["valuesFrom"], [{
+            "kind": "ConfigMap", "name": "openbao-site", "valuesKey": "values.yaml",
+        }])
+        self.assertNotIn("SecretStore", {d["kind"] for d in self.server})
+        self.assertNotIn("ExternalSecret", {d["kind"] for d in self.server})
+        eso = yaml.safe_load(Path("platform/external-secrets/resources/release.yaml").read_text())
+        self.assertIs(eso["spec"]["values"]["rbac"]["serviceAccountTokenCreate"], False)
+
+    def test_missing_private_node_fails_closed(self):
+        result = subprocess.run([
+            "helm", "template", "openbao", os.environ["OPENBAO_CHART_ARCHIVE"],
+            "--namespace", "openbao", "--kube-version", "1.37.0", "--values", "-",
+        ], input=yaml.safe_dump(self.release["spec"]["values"]), capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
 
     def test_network_boundaries_and_private_source_no_control_files(self):
         for d in self.server + self.adapter:
@@ -185,13 +185,15 @@ class OpenBaoPoCTests(unittest.TestCase):
                 self.assertNotIn("world", serialized)
                 self.assertNotIn("0.0.0.0/0", serialized)
                 self.assertNotIn("toFQDNs", serialized)
-        source = next(d for d in self.private if d["kind"] == "GitRepository")
-        self.assertEqual(source["spec"]["secretRef"], {"name": "flux-private-repo"})
-        self.assertIn("!/clusters/homelab/openbao", source["spec"]["ignore"])
-        self.assertNotIn("!/inventory", source["spec"]["ignore"])
+        self.assertNotIn("GitRepository", {d["kind"] for d in self.private})
+        inputs = next(d for d in self.private if d["kind"] == "Kustomization")
+        self.assertEqual(inputs["spec"]["sourceRef"],
+                         {"kind": "GitRepository", "name": "homelab-private"})
         self.assertNotIn("ClusterRole", {d["kind"] for d in self.private})
+        self.assertEqual(len([d for d in self.private if d["kind"] == "Role"]), 1)
         for d in self.private:
             if d["kind"] == "Role":
+                self.assertEqual(d["metadata"]["namespace"], "openbao")
                 for rule in d["rules"]:
                     self.assertNotIn("delete", rule["verbs"])
                     self.assertNotIn("list", rule["verbs"])
