@@ -6,3 +6,6 @@ resources:
   - release.yaml
   - network-policy.yaml
   - private-inputs.yaml
+  - postgresql.yaml
+  - postgresql-storage.yaml
+  - postgresql-network-policy.yaml

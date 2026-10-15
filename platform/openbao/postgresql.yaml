@@ -1,0 +1,105 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: cnpg
+  namespace: openbao
+spec:
+  interval: 1h
+  url: https://cloudnative-pg.github.io/charts
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: cnpg
+  namespace: openbao
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  suspend: true
+  interval: 10m
+  timeout: 5m
+  chart:
+    spec:
+      chart: cloudnative-pg
+      version: 0.29.1  # Operator 1.30.1.
+      sourceRef:
+        kind: HelmRepository
+        name: cnpg
+  install:
+    crds: CreateReplace
+  upgrade:
+    crds: CreateReplace
+  values:
+    fullnameOverride: cnpg
+    config:
+      clusterWide: false  # Watch/manage databases only in this namespace.
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: openbao-db
+  namespace: openbao
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  suspend: true
+  interval: 10m
+  timeout: 10m
+  dependsOn:
+    - name: cnpg
+      namespace: openbao
+  chart:
+    spec:
+      chart: cluster
+      version: 0.9.0
+      sourceRef:
+        kind: HelmRepository
+        name: cnpg
+  values:
+    fullnameOverride: openbao-db
+    type: postgresql
+    version:
+      postgresql: '17'
+    cluster:
+      instances: 1
+      imageName: >-
+        ghcr.io/cloudnative-pg/postgresql:17.11@sha256:70664ebcfa1100361b5bdc28bbf06fdbe08db2dc4ad7bd14de33c5e05fe8ea8e
+      annotations:
+        helm.sh/resource-policy: keep
+      enableSuperuserAccess: false
+      enablePDB: false  # Single-instance PoC; no HA/drain guarantees.
+      storage:
+        storageClass: openbao-postgresql-local
+        size: 4Gi
+      affinity:
+        nodeSelector:
+          kubernetes.io/hostname: cp01
+      initdb:
+        database: openbao
+        owner: openbao
+      postgresql:
+        parameters:
+          max_connections: '30'
+          shared_buffers: 128MB
+        pg_hba:
+          - hostnossl all all all reject
+      resources:
+        requests:
+          cpu: 250m
+          memory: 512Mi
+        limits:
+          cpu: '1'
+          memory: 1Gi
+      monitoring:
+        enabled: false
+        instrumentation:
+          logicalReplication: false
+    backups:
+      enabled: false
