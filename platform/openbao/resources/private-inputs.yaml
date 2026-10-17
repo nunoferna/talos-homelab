@@ -41,7 +41,7 @@ metadata:
   name: openbao-inputs
   namespace: flux-system
 spec:
-  suspend: true
+  suspend: false
   interval: 1m
   path: ./clusters/homelab/openbao/inputs
   sourceRef:

@@ -6,11 +6,11 @@ chart 0.9.0. PostgreSQL 17.11 is pinned to a verified official image digest.
 No custom database StatefulSet, new test suite or backup project.
 
 The public root owns a dedicated Flux Kustomization for this module, matching
-the ESO reconciliation pattern. This first activation enables only CNPG and
-PostgreSQL. Merging deploys the operator, database, retained local storage and
-bounded policies; OpenBao and private TLS reconciliation remain suspended.
-Existing ESO is unchanged. Native Helm dependencies order operator -> database
--> OpenBao; a separate reviewed change enables OpenBao after database checks.
+the ESO reconciliation pattern. Following PostgreSQL acceptance, this stage
+enables OpenBao and its existing encrypted private TLS input. CNPG, database,
+retained local storage and bounded policies are unchanged. Existing ESO is
+unchanged. Native Helm dependencies order operator -> database -> OpenBao.
+OpenBao is normal server mode, not dev mode; initialization/unseal is separate.
 
 ## Existing filesystem, not disk provisioning
 
@@ -60,14 +60,19 @@ without general world egress. No service is publicly exposed.
    Keep actual rollout evidence in protected operator custody, not public Git.
 2. Before merging activation, acknowledge the CNPG/Kubernetes PoC support
    exception below. No cluster version change is included.
-3. Merge this PostgreSQL-first activation. Flux installs the official charts;
+3. Merge PostgreSQL-first activation. Flux installs the official charts;
    no manual Helm install or imperative resource creation is needed. The child
    reconciliation checks both HelmReleases, the CNPG Cluster and its PVC.
 4. Verify live CRDs/webhook, cp01 placement, exact retained PVC/PV binding,
    CNPG Ready, generated TLS identities and bounded network access. Native
    readiness is necessary but does not certify the unsupported combination.
-5. Then enable private TLS reconciliation and OpenBao, followed by reviewed
-   initialization/unseal. Helm Ready is not initialized/unsealed readiness.
+5. After database acceptance, merge this private TLS/OpenBao activation. Flux
+   decrypts the existing TLS input using its existing SOPS identity and deploys
+   the official OpenBao chart. No new ciphertext or keys are generated here.
+   The kubelet will not start the container without the required TLS/database
+   Secret mounts; the two Flux controllers may reconcile in either order.
+   Child health checks require successful TLS reconciliation and Helm install,
+   not initialized/unsealed readiness. Then review initialization/unseal.
 6. Configure bounded ESO authentication only after OpenBao is healthy.
 
 CNPG 1.30 lists Kubernetes 1.37 as tested but NOT formally supported in its
@@ -84,6 +89,23 @@ the root reference is not an uninstall: prune is false and deletion orphans
 resources. Retain data and review forward fixes; never delete the namespace,
 Cluster, PVC/PV or serving bind mount as rollback. Pod replacement will still
 require OpenBao unseal once OpenBao is activated.
+
+## Expected first server state
+
+Before initialization, expect initialized=false and sealed=true from the native
+[bao status](https://openbao.org/docs/commands/status/) command (exit 2 for
+sealed, not exit 1 for a connection/TLS error). A Running pod with 0/1 readiness
+is expected. Its verified readiness probe remains failing until unseal; the
+liveness probe deliberately accepts sealed/uninitialized status to avoid a
+restart loop. Helm waiting is disabled for this boundary, so Helm/Flux Ready
+must not be interpreted as application-ready or safe for real secrets.
+
+After merge, verify actual database connectivity, TLS input reconciliation,
+serving certificate identity, server version/storage type and stable restart
+count using read-only diagnostics. Do not initialize, submit unseal shares,
+create an auth mount/secret engine, or configure ESO in this activation step.
+Root tokens and unseal material must stay outside Git, CI logs and chat.
+The next operator change requires reviewed local automation and key custody.
 
 References: [PostgreSQL backend](https://openbao.org/docs/configuration/storage/postgresql/),
 [CNPG charts](https://github.com/cloudnative-pg/charts),

@@ -22,11 +22,12 @@ An empty, namespace-scoped ESO controller can be installed independently before
 storage or OpenBao. The [controller-only PoC](../platform/external-secrets/README.md)
 does exactly that; it does not move real secret-store integration ahead of its
 dependencies. The [OpenBao module](../platform/openbao/README.md) activates
-PostgreSQL first, while OpenBao and private TLS reconciliation stay suspended
-until database acceptance. The operator's dedicated Flux reconciliation checks
-the database releases, CNPG Cluster and bound PVC. Longhorn/Ceph preparation
-is not a prerequisite. Etcd backups,
-volume backups and restore drills remain deferred, not completed.
+PostgreSQL first, then OpenBao and encrypted private TLS after database
+acceptance. Its dedicated Flux reconciliation checks the releases, CNPG Cluster,
+bound PVC and private TLS reconciliation. Normal OpenBao starts sealed and
+uninitialized: installation success is not application readiness. Longhorn/Ceph
+preparation is not a prerequisite. Etcd backups, volume backups and restore
+drills remain deferred, not completed.
 
 Before real secrets, separately review availability, capacity, audit logging,
 operator access, key custody and recovery. The PoC currently promises none of
