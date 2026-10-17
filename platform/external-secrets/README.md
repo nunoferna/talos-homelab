@@ -1,9 +1,8 @@
 # External Secrets Operator
 
 Flux owns the official ESO chart. This stage upgrades the empty controller
-from 2.11.0 to 2.12.0 without expanding access. Upstream recommends one minor
-at a time: verify this rollout before a separate 2.13 upgrade. Version 2.12 is
-an intermediate step, not the supported endpoint.
+directly from 2.11.0 to 2.13.0 without expanding access, as requested for this
+empty PoC. This skips upstream's recommended one-minor-at-a-time upgrade path.
 
 ## Current boundary
 
