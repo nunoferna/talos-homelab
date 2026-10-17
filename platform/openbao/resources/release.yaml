@@ -50,11 +50,15 @@ spec:
     csi:
       enabled: false
     server:
+      # Configuration changes wait for a reviewed local restart and unseal.
+      updateStrategyType: OnDelete
+      configAnnotation: true
       standalone:
         enabled: true
         config: |
           ui = false
           disable_mlock = true
+          unsafe_allow_api_audit_creation = false
           api_addr = "https://openbao.openbao.svc:8200"
           cluster_addr = "https://openbao-0.openbao-internal.openbao.svc:8201"
           listener "tcp" {
@@ -68,6 +72,15 @@ spec:
           storage "postgresql" {
             max_parallel = 4
             max_connect_retries = 50
+          }
+          audit "file" "stdout" {
+            description = "PoC audit events to container stdout"
+            options {
+              file_path = "stdout"
+              format = "json"
+              log_raw = "false"
+              hmac_accessor = "true"
+            }
           }
       ha:
         enabled: false
