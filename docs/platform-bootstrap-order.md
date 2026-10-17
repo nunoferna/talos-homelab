@@ -1,102 +1,33 @@
-# Platform bootstrap order
+# Platform ownership and order
 
-The platform is built in dependency order. A higher layer must not be required
-to recover a lower layer.
+1. **OpenTofu:** Talos rendering, day-zero Cilium and Flux. Do not give Flux
+   ownership of the same Helm releases. Talos delivery is separately reviewed
+   local Ansible, not an automatic consequence of state apply.
+2. **Flux:** public `clusters/homelab` resources and narrowly scoped private
+   inputs through an authenticated, read-only Git source.
+3. **PostgreSQL → OpenBao:** official charts, verified TLS, retained local
+   PostgreSQL data. See [architecture and limits](../platform/openbao/README.md).
+4. **ESO → applications:** bounded Kubernetes authentication, namespace stores
+   and per-application policies. See [current scope and next gate](../platform/external-secrets/README.md).
+5. **SOPS exceptions:** only allowlisted bootstrap inputs that cannot come from
+   OpenBao. Unseal/root material stays outside Git and the cluster.
 
-1. **Cilium CNI** provides pod networking and policy enforcement.
-2. **Flux** reconciles the public `clusters/homelab` root. A separate
-   authenticated source may later reconcile sensitive resources from the
-   private repository, but Flux never owns Cilium or its own day-zero install.
-3. **PostgreSQL and persistent storage** provide OpenBao's durable backend,
-   with one CloudNativePG instance on a retained local volume. This PoC does
-   not require Longhorn/Ceph or promise automatic replication.
-4. **OpenBao** uses TLS and its own chosen durable backend. The selected PoC is
-   one server backed by PostgreSQL, without an OpenBao data PVC or HA.
-5. **External Secrets Operator** authenticates to OpenBao using Kubernetes
-   service accounts and namespace-scoped policies.
-6. **SOPS exceptions** cover only allowlisted bootstrap secrets that cannot be
-   sourced from OpenBao.
-7. **Applications and policies** are introduced namespace by namespace.
+An empty ESO controller can run before OpenBao; secret-provider integration
+cannot. No component should depend on secrets it must itself make available.
+Public Git contains resources, not credentials, private inventory or operator
+records. Make changes through reviewed commits, with read-only verification.
 
-An empty, namespace-scoped ESO controller can be installed independently before
-storage or OpenBao. The [controller-only PoC](../platform/external-secrets/README.md)
-does exactly that; it does not move real secret-store integration ahead of its
-dependencies. The [OpenBao module](../platform/openbao/README.md) activates
-PostgreSQL first, then OpenBao and encrypted private TLS after database
-acceptance. Its dedicated Flux reconciliation checks the releases, CNPG Cluster,
-bound PVC and private TLS reconciliation. Normal OpenBao starts sealed and
-uninitialized: installation success is not application readiness. Longhorn/Ceph
-preparation is not a prerequisite. Etcd backups, volume backups and restore
-drills remain deferred, not completed.
+## PoC limits
 
-Before real secrets, separately review availability, capacity, audit logging,
-operator access, key custody and recovery. The PoC currently promises none of
-the replication/failover/restore guarantees of a production platform.
+No HA or completed database/etcd recovery. Longhorn/Ceph and backup work remain
+deferred. Retained volumes and encrypted key custody are not database backups.
+Review availability, audit logging, non-root operator access and recovery
+before using real application secrets.
 
-## Why Cilium precedes Flux
-
-Flux controllers require working pod networking. Cilium is therefore a day-0
-component permanently owned by a dedicated OpenTofu root and encrypted state.
-Validate Cilium before bootstrapping Flux; do not create a Flux `HelmRelease`
-for it or allow two reconcilers to own the same Helm release.
-
-Use standard Kubernetes `NetworkPolicy` when it expresses the requirement and
-`CiliumNetworkPolicy` only for Cilium-specific features such as FQDN or layer-7
-rules. Begin with policy enforcement disabled during migration, observe flows,
-allow DNS and required control-plane dependencies, and introduce default-deny
-one namespace at a time.
-
-## Historical existing-cluster migration gate
-
-The original cluster used Flannel and kube-proxy. Cilium is now installed via
-OpenTofu; this migration checklist is retained for a future rebuild, not as a
-description of today's CNI. Replacing either is a high-impact change:
-
-1. Pin a stable Cilium release whose tested matrix includes the cluster's
-   Kubernetes version.
-2. Record the current CNI, kube-proxy, pod/service CIDRs, node health, and
-   control-plane reachability.
-3. Render and review Talos machine configuration changes; do not deliver them
-   as part of an ordinary OpenTofu apply.
-4. Follow Cilium's dual-overlay migration procedure with a distinct temporary
-   pod CIDR and encapsulation port. Migrate one node at a time.
-5. Confirm every pod is Cilium-managed before removing Flannel.
-6. Move to kube-proxy replacement only after Cilium networking is healthy, then
-   disable kube-proxy in Talos in a separate reviewed stage.
-7. Run Cilium connectivity tests, DNS/API checks, cross-node traffic checks, and
-   node-reboot checks before enabling policy enforcement.
-
-Do not combine CNI replacement, kube-proxy removal, Flux bootstrap, and network
-default-deny into one change. Each stage needs an independently observable
-health gate and rollback point.
-
-## Compatibility gate for this cluster
-
-The cluster currently runs Kubernetes 1.37.0. At the time this decision was
-recorded, stable Cilium 1.20.2 guaranteed compatibility through Kubernetes 1.36;
-Cilium 1.21 had Kubernetes 1.37 support in prerelease builds only. The operator
-separately accepted continuing with stable Cilium 1.20.2; that acceptance is not
-an upstream compatibility guarantee. Recheck the supported matrix before
-persistent OpenBao or make a separately reviewed cluster-version decision.
-
-ESO 2.11 likewise publishes support through Kubernetes 1.36. The operator
-accepted a controller-only PoC on 1.37 on 2026-10-07, without secret stores or
-real credentials. Passing static checks is not a runtime compatibility result.
-
-CNPG 1.30 lists Kubernetes 1.37 as tested but not formally supported in its
-[support matrix](https://cloudnative-pg.io/docs/1.30/supported_releases/).
-Its PoC exception must be acknowledged before merging database activation;
-readiness checks do not turn it into a supported production configuration.
-
-## OpenBao and SOPS rules
-
-OpenBao must not depend on ESO or on secrets that only OpenBao can provide. Its
-initial TLS and operating unseal keys must exist independently of OpenBao and
-outside Git. The selected PoC uses the protected Mac for required operator
-material without starting a backup project. Independent recovery copies remain
-a gate before real secrets, not an activation requirement for disposable tests.
-
-The SOPS allowlist should normally be limited to bootstrap credentials for
-storage, networking, or secret-store initialization when no workload identity
-path exists. CI must reject unencrypted `Secret` values and SOPS files outside
-the approved paths.
+Kubernetes is 1.37. Cilium 1.20.2's recorded compatibility exception and CNPG
+1.30's tested-but-not-formally-supported exception were operator-accepted for
+this PoC. On 2026-10-17 the operator also accepted ESO's Kubernetes 1.37
+compatibility exception for disposable-data provider integration. No access
+is enabled by that decision or the controller upgrade. Recheck upstream
+matrices before expanding scope; static rendering and readiness do not certify
+production compatibility. No cluster version change is implied.
