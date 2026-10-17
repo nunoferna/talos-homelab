@@ -23,6 +23,14 @@ OpenBao initialization/unseal use reviewed local Ansible from the private repo.
 Never initialize again after successful initialization. Pod replacement requires
 manual unseal. Helm/Flux Ready alone does not prove OpenBao is unsealed.
 
+Auditing is declared in the server configuration, with JSON/HMAC-protected
+events to container stdout and unsafe API audit creation disabled. `OnDelete`
+prevents an automatic restart: after Flux applies the configuration, use the
+reviewed private restart procedure, then separately approve unseal. Until then,
+the running process still uses its previous configuration. Treat logs as
+sensitive; stdout is not durable or tamper-resistant audit storage. If the
+only audit destination cannot write, OpenBao can block requests.
+
 For read-only acceptance, check the child Flux reconciliation, three releases,
 CNPG Ready, retained PVC/PV binding, verified TLS and native `bao status`.
 The next phase is [bounded ESO integration](../external-secrets/README.md);
