@@ -5,3 +5,4 @@ resources:
   - ../../platform/smoke-test
   - ../../platform/private-sync
   - ../../platform/external-secrets
+  - ../../platform/openbao

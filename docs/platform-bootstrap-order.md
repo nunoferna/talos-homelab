@@ -7,10 +7,11 @@ to recover a lower layer.
 2. **Flux** reconciles the public `clusters/homelab` root. A separate
    authenticated source may later reconcile sensitive resources from the
    private repository, but Flux never owns Cilium or its own day-zero install.
-3. **Persistent storage** supplies an explicit backing volume; it does not
-   require Longhorn/Ceph or automatic replication for every application.
+3. **PostgreSQL and persistent storage** provide OpenBao's durable backend,
+   with one CloudNativePG instance on a retained local volume. This PoC does
+   not require Longhorn/Ceph or promise automatic replication.
 4. **OpenBao** uses TLS and its own chosen durable backend. The selected PoC is
-   one integrated-Raft instance on a retained node-local volume, not HA.
+   one server backed by PostgreSQL, without an OpenBao data PVC or HA.
 5. **External Secrets Operator** authenticates to OpenBao using Kubernetes
    service accounts and namespace-scoped policies.
 6. **SOPS exceptions** cover only allowlisted bootstrap secrets that cannot be
@@ -20,10 +21,11 @@ to recover a lower layer.
 An empty, namespace-scoped ESO controller can be installed independently before
 storage or OpenBao. The [controller-only PoC](../platform/external-secrets/README.md)
 does exactly that; it does not move real secret-store integration ahead of its
-dependencies. On 2026-10-14 the operator selected a single OpenBao instance on
-node-local persistent storage and deferred recovery work. The
-[OpenBao preparation](../platform/openbao/README.md) is disconnected/suspended,
-not deployed. Longhorn/Ceph preparation is not a prerequisite. Etcd backups,
+dependencies. The [OpenBao module](../platform/openbao/README.md) activates
+PostgreSQL first, while OpenBao and private TLS reconciliation stay suspended
+until database acceptance. The operator's dedicated Flux reconciliation checks
+the database releases, CNPG Cluster and bound PVC. Longhorn/Ceph preparation
+is not a prerequisite. Etcd backups,
 volume backups and restore drills remain deferred, not completed.
 
 Before real secrets, separately review availability, capacity, audit logging,
@@ -79,6 +81,11 @@ persistent OpenBao or make a separately reviewed cluster-version decision.
 ESO 2.11 likewise publishes support through Kubernetes 1.36. The operator
 accepted a controller-only PoC on 1.37 on 2026-10-07, without secret stores or
 real credentials. Passing static checks is not a runtime compatibility result.
+
+CNPG 1.30 lists Kubernetes 1.37 as tested but not formally supported in its
+[support matrix](https://cloudnative-pg.io/docs/1.30/supported_releases/).
+Its PoC exception must be acknowledged before merging database activation;
+readiness checks do not turn it into a supported production configuration.
 
 ## OpenBao and SOPS rules
 

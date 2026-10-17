@@ -23,8 +23,8 @@ repository or independently secured storage.
 - `clusters/homelab/`: active public Flux reconciliation root.
 - `platform/external-secrets/`: namespace-scoped, controller-only ESO PoC;
   no stores or credentials. See its [acceptance runbook](platform/external-secrets/README.md).
-- `platform/openbao/`: disconnected preparation for a single persistent,
-  node-local OpenBao/ESO PoC; no Longhorn or recovery activation.
+- `platform/openbao/`: PostgreSQL-first GitOps activation for a single-instance
+  OpenBao/ESO PoC; OpenBao remains suspended until database acceptance.
   See its [bootstrap boundaries](platform/openbao/README.md).
 - `platform/backup/talos/`: staged upstream encrypted etcd backup configuration;
   not reconciled or scheduled yet. See its [activation runbook](platform/backup/talos/README.md).
