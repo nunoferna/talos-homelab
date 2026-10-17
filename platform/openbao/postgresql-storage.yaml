@@ -1,0 +1,37 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: openbao-postgresql-local
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+    storageclass.kubernetes.io/is-default-class: 'false'
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Retain
+allowVolumeExpansion: false
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: openbao-postgresql-data
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  capacity:
+    storage: 4Gi  # Scheduling declaration, not an enforced directory quota.
+  volumeMode: Filesystem
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: openbao-postgresql-local
+  claimRef:
+    namespace: openbao
+    name: openbao-db-1
+  local:
+    path: /var/mnt/openbao-poc
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values: [cp01]

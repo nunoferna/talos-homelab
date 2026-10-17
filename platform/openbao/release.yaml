@@ -10,10 +10,9 @@ spec:
   interval: 10m
   timeout: 5m
   releaseName: openbao
-  valuesFrom:
-    - kind: ConfigMap
-      name: openbao-site
-      valuesKey: values.yaml
+  dependsOn:
+    - name: openbao-db
+      namespace: openbao
   chart:
     spec:
       chart: openbao
@@ -66,9 +65,9 @@ spec:
             tls_min_version = "tls12"
             tls_auto_reload = true
           }
-          storage "raft" {
-            path = "/openbao/data"
-            node_id = "openbao-0"
+          storage "postgresql" {
+            max_parallel = 4
+            max_connect_retries = 50
           }
       ha:
         enabled: false
@@ -80,19 +79,34 @@ spec:
         serviceDiscovery:
           enabled: false
       dataStorage:
-        enabled: true
-        size: 2Gi
-        storageClass: openbao-local
-      persistentVolumeClaimRetentionPolicy:
-        whenDeleted: Retain
-        whenScaled: Retain
+        enabled: false
       livenessProbe:
         enabled: true
         # Do not restart-loop a sealed or uninitialized server.
         path: /v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204
       extraEnvironmentVars:
         BAO_CACERT: /openbao/tls/ca.crt
+        PGHOST: openbao-db-rw.openbao.svc
+        PGPORT: '5432'
+        PGDATABASE: openbao
+        PGSSLMODE: verify-full
+        PGSSLROOTCERT: /openbao/postgresql/ca.crt
+      extraSecretEnvironmentVars:
+        - envName: PGUSER
+          secretName: openbao-db-app
+          secretKey: username
+        - envName: PGPASSWORD
+          secretName: openbao-db-app
+          secretKey: password
       volumes:
+        - name: postgresql-ca
+          secret:
+            secretName: openbao-db-ca
+            defaultMode: 288
+            # Mount only the public CA, never the operator's signing key.
+            items:
+              - key: ca.crt
+                path: ca.crt
         - name: tmp
           emptyDir:
             sizeLimit: 64Mi
@@ -101,6 +115,9 @@ spec:
             secretName: openbao-tls
             defaultMode: 288  # 0440, readable by the pod's filesystem group.
       volumeMounts:
+        - name: postgresql-ca
+          mountPath: /openbao/postgresql
+          readOnly: true
         - name: tmp
           mountPath: /tmp
         - name: tls
@@ -127,44 +144,3 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: [ALL]
-    # Native chart feature, not a custom storage controller/provisioner.
-    extraObjects:
-      - apiVersion: storage.k8s.io/v1
-        kind: StorageClass
-        metadata:
-          name: openbao-local
-          annotations:
-            storageclass.kubernetes.io/is-default-class: 'false'
-            helm.sh/resource-policy: keep
-        provisioner: kubernetes.io/no-provisioner
-        volumeBindingMode: WaitForFirstConsumer
-        reclaimPolicy: Retain
-        allowVolumeExpansion: false
-      - apiVersion: v1
-        kind: PersistentVolume
-        metadata:
-          name: openbao-local-data
-          annotations:
-            helm.sh/resource-policy: keep
-        spec:
-          capacity:
-            storage: 2Gi
-          volumeMode: Filesystem
-          accessModes: [ReadWriteOnce]
-          persistentVolumeReclaimPolicy: Retain
-          storageClassName: openbao-local
-          claimRef:
-            namespace: openbao
-            name: data-openbao-0
-          local:
-            path: /var/mnt/openbao-poc
-          nodeAffinity:
-            required:
-              nodeSelectorTerms:
-                - matchExpressions:
-                    - key: kubernetes.io/hostname
-                      operator: In
-                      values:
-                        - >-
-                          {{ required "Set the private storage node"
-                          (index .Values.server.nodeSelector "kubernetes.io/hostname") }}

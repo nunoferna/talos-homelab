@@ -23,6 +23,8 @@ requires OpenTofu 1.12.6 because state and plan encryption are enforced.
   custom kubelet settings and obtain separate node-delivery approval. See the
   [OpenBao host boundary](../../platform/openbao/README.md). No disk provisioning,
   extension/image change or backup access is implied.
+  In the PostgreSQL-backed PoC this directory stores the OpenBao database, not
+  Raft. The host input is unchanged; review a fresh plan before delivery.
 
 Relative inventory paths are resolved from the process working directory. An
 absolute path is clearer for operator and CI usage.

@@ -11,14 +11,11 @@ metadata:
   name: openbao-inputs-reconciler
   namespace: openbao
 rules:
+  # Only the exceptional serving TLS input comes from the private repository.
   # Ordinary create cannot be name-restricted. Later writes are exact-name only.
   - apiGroups: ['']
-    resources: [configmaps, secrets]
+    resources: [secrets]
     verbs: [create]
-  - apiGroups: ['']
-    resources: [configmaps]
-    resourceNames: [openbao-site]
-    verbs: [get, patch, update]
   - apiGroups: ['']
     resources: [secrets]
     resourceNames: [openbao-tls]

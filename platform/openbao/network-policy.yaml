@@ -4,7 +4,10 @@ metadata:
   name: openbao
   namespace: openbao
 spec:
-  endpointSelector: {}
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: openbao
+      component: server
   ingress:
     - fromEndpoints:
         - matchLabels:
@@ -21,6 +24,13 @@ spec:
             - port: '8200'
               protocol: TCP
   egress:
+    - toEndpoints:
+        - matchLabels:
+            cnpg.io/cluster: openbao-db
+      toPorts:
+        - ports:
+            - port: '5432'
+              protocol: TCP
     - toEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: kube-system
