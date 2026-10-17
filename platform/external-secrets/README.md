@@ -1,89 +1,49 @@
-# External Secrets Operator: controller-only PoC
+# External Secrets Operator
 
-Merging this module into the public `main` branch activates it through the
-existing Flux source. No imperative installation or private-repository change
-is required. OpenTofu continues to own day-zero Cilium and Flux.
+Flux owns the official ESO chart. This stage upgrades the empty controller
+from 2.11.0 to 2.12.0 without expanding access. Upstream recommends one minor
+at a time: verify this rollout before a separate 2.13 upgrade. Version 2.12 is
+an intermediate step, not the supported endpoint.
 
-## Deliberate limits
+## Current boundary
 
-- Official chart **2.11.0**, one controller and upstream CRDs; no webhook or
-  certificate controller. Admission webhook validation is intentionally absent.
-- RBAC and reconciliation are confined to `external-secrets`. This controller
-  cannot read bootstrap Secrets in `flux-system` or reconcile application
-  namespaces. No broad service-account TokenRequest permission is granted.
-- No SecretStore, ExternalSecret, PushSecret, provider credentials, TLS Secret,
-  ingress, metrics service, persistent volume or OpenBao installation.
-- Cilium policy selects this namespace only: DNS to CoreDNS and API-server
-  egress; node-origin health probes on TCP 8082. Provider/OpenBao egress is not
-  allowed. Cilium's local-host traffic exemption may allow additional local-node
-  ingress depending on the existing agent settings; this is not a host firewall.
-- Backup preparation remains disconnected and suspended. This PR does not
-  activate it or imply that etcd recovery has been completed.
+- One controller, scoped to `external-secrets`; no application namespaces.
+- No stores, ExternalSecrets, provider credentials or token-minting permission.
+- Cluster-wide features, webhook and certificate controller are disabled.
+  Admission webhook validation is therefore absent.
+- Cilium permits DNS/API egress and node health probes, not OpenBao access.
+  This is not a host firewall.
 
-On 2026-10-07, the operator accepted this **empty PoC** on Kubernetes 1.37.0
-despite ESO 2.11's published support matrix stopping at 1.36. The chart's
-`kubeVersion` constraint and an offline 1.37 render do not establish runtime
-compatibility. Recheck [upstream support](https://external-secrets.io/latest/introduction/stability-support/)
-before any real secret-store integration. This is not production-ready secret
-management and must not hold real provider credentials yet.
+Kubernetes 1.37 is outside ESO's published 1.36 test coverage, including the
+current 2.13 release. On 2026-10-17 the operator accepted this compatibility
+exception for disposable-data provider integration, not production use.
+Recheck [support and upgrade guidance](https://external-secrets.io/latest/introduction/stability-support/)
+before changing scope. This upgrade grants no provider access.
 
-## Offline validation
+## Validation and rollback
 
-CI downloads the release archive and verifies SHA-256
-`8199b42fe80b871c6a86233a80bb14f599fd6e1e6462c1216d836577f845e161`
-before rendering with Helm 4.3.0 and Kubernetes 1.37.0 capabilities. The tests
-inspect the actual rendered RBAC, security context, probes and CRDs, not only
-the chart values. The runtime HelmRepository uses the official HTTPS index and
-an exact version; the CI archive checksum is **not** a Flux digest pin.
+Existing CI verifies the official chart archive's release SHA-256 and renders
+its actual RBAC/security settings with Helm 4.3.0 and Kubernetes 1.37 capabilities.
+The checksum is an offline check, not a Flux digest pin or compatibility proof.
 
-To repeat locally with Helm 4.3.0, kubectl and the repository's Python tools:
+After merge, use read-only checks: Flux/Helm Ready, one ready controller,
+established CRDs, no stores/ExternalSecrets, and no new controller errors.
+ESO must still lack Secret access in `flux-system` and TokenRequest access.
+Fix failures through reviewed Git, not manual Helm or RBAC changes.
 
-```sh
-eso_chart_archive="$(mktemp /tmp/eso-chart.XXXXXX)"
-curl --fail --silent --show-error --location \
-  https://github.com/external-secrets/external-secrets/releases/download/helm-chart-2.11.0/external-secrets-2.11.0.tgz \
-  --output "$eso_chart_archive"
-ESO_CHART_ARCHIVE="$eso_chart_archive" python tests/external_secrets.py
-```
+Review rollback against upstream notes; CRDs are retained and Helm rollback
+does not downgrade their schemas. Never delete CRDs as routine rollback.
 
-## After merge: read-only acceptance
+## Next: OpenBao connection
 
-Use the existing protected kubeconfig. These commands do not change the cluster:
+After the upgrade and reviewed integration changes, use Kubernetes authentication
+with short-lived service-account tokens, verified TLS, a namespace `SecretStore`
+and a read-only policy for that application's exact KV path. OpenBao uses its
+own rotating pod token for TokenReview; no static reviewer JWT or root token
+belongs in ESO. The [Vault provider](https://external-secrets.io/latest/provider/openbao/)
+also supports OpenBao; it does not deploy HashiCorp Vault.
 
-```sh
-kubectl -n flux-system get kustomization external-secrets
-kubectl -n external-secrets get helmrepository,helmrelease
-kubectl -n external-secrets rollout status deployment/external-secrets --timeout=5m
-kubectl -n external-secrets get pods,ciliumnetworkpolicies
-kubectl get crd externalsecrets.external-secrets.io secretstores.external-secrets.io
-kubectl -n external-secrets get secretstores,externalsecrets
-kubectl auth can-i get secrets -n flux-system \
-  --as=system:serviceaccount:external-secrets:external-secrets
-kubectl auth can-i create serviceaccounts/token -n external-secrets \
-  --as=system:serviceaccount:external-secrets:external-secrets
-kubectl -n external-secrets logs deployment/external-secrets --tail=100
-```
-
-Acceptance: both Flux resources Ready, one ready controller, CRDs established,
-no stores or ExternalSecrets, both authorization checks return `no`, and no
-repeated API/network/forbidden errors in controller logs. Keep log output
-private; do not paste credentials if a future integration changes log contents.
-If reconciliation fails, diagnose with read-only status/events; submit the fix
-as a reviewed Git change, not a manual Helm upgrade or permission expansion.
-
-## Rollback and next phase
-
-Rollback through a reviewed Git revert of the root reference. Flux pruning
-removes the child reconciliation and Helm release; the namespace is protected
-from cascading deletion and CRDs have Helm's `keep` annotation. Rollback does
-not remove CRDs or any persisted custom resources. Never delete CRDs as a
-routine rollback: doing so deletes their custom resources cluster-wide.
-
-Next: install the [node-local OpenBao PoC](../openbao/README.md) from its official
-Helm repository. Configure the bounded ESO adapter only after OpenBao is healthy;
-no speculative adapter permissions are installed, and the live empty controller
-configuration is unchanged. This does not require Longhorn or activate
-deferred recovery. Before real application namespaces/secrets, separately review
-ESO admission validation/certificate RBAC, compatibility, operator access and
-independent recovery. Provider/auth/refresh acceptance must use test values only.
-SOPS remains an exception for bootstrap inputs that cannot come from OpenBao.
+Add access only for the chosen application namespace. No wildcard policies,
+cluster-wide store or demo workload. Configure audit logging and non-root
+operator access before real application secrets. SOPS remains bootstrap-only;
+HA, storage changes and recovery work remain deferred.

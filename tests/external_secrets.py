@@ -9,7 +9,7 @@ import unittest
 import yaml
 
 
-CHART_SHA256 = "8199b42fe80b871c6a86233a80bb14f599fd6e1e6462c1216d836577f845e161"
+CHART_SHA256 = "4b584136b7311c0af8c8719d377cc5b1a7ef12c2de18f1fdb30614eab75bdeb3"
 NAMESPACE = "external-secrets"
 FORBIDDEN = {
     "Secret", "SecretStore", "ClusterSecretStore", "ExternalSecret",
@@ -72,7 +72,7 @@ class ExternalSecretsTests(unittest.TestCase):
             "interval": "1h", "url": "https://charts.external-secrets.io",
         })
         self.assertEqual(self.release["spec"]["chart"]["spec"], {
-            "chart": NAMESPACE, "version": "2.11.0",
+            "chart": NAMESPACE, "version": "2.12.0",
             "sourceRef": {"kind": "HelmRepository", "name": NAMESPACE},
         })
         self.assertEqual(self.release["spec"]["releaseName"], NAMESPACE)
@@ -132,7 +132,7 @@ class ExternalSecretsTests(unittest.TestCase):
         self.assertFalse(pod.get("hostIPC", False))
         self.assertEqual(len(pod["containers"]), 1)
         container = pod["containers"][0]
-        self.assertEqual(container["image"], "ghcr.io/external-secrets/external-secrets:v2.11.0")
+        self.assertEqual(container["image"], "ghcr.io/external-secrets/external-secrets:v2.12.0")
         args = container["args"]
         self.assertIn("--namespace=external-secrets", args)
         for flag in ("cluster-store", "cluster-external-secret", "cluster-push-secret", "push-secret"):
