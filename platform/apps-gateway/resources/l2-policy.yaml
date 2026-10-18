@@ -1,0 +1,17 @@
+apiVersion: cilium.io/v2alpha1
+kind: CiliumL2AnnouncementPolicy
+metadata:
+  name: apps-internal
+spec:
+  serviceSelector:
+    matchLabels:
+      io.kubernetes.service.namespace: apps-gateway
+      io.kubernetes.service.name: cilium-gateway-apps-internal
+  nodeSelector:
+    matchExpressions:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+  interfaces:
+    - '${APPS_GATEWAY_INTERFACE_REGEX}'
+  externalIPs: false
+  loadBalancerIPs: true

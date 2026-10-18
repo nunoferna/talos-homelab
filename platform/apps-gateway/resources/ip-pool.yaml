@@ -1,0 +1,12 @@
+apiVersion: cilium.io/v2
+kind: CiliumLoadBalancerIPPool
+metadata:
+  name: apps-internal
+spec:
+  blocks:
+    - start: '${APPS_GATEWAY_IPV4}'
+      stop: '${APPS_GATEWAY_IPV4}'
+  serviceSelector:
+    matchLabels:
+      io.kubernetes.service.namespace: apps-gateway
+      io.kubernetes.service.name: cilium-gateway-apps-internal

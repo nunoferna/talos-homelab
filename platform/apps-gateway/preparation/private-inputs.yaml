@@ -1,0 +1,93 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: apps-gateway-inputs
+  namespace: flux-system
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: apps-gateway-inputs
+  namespace: flux-system
+rules:
+  # Create cannot be restricted by name; later writes are exact-name only.
+  - apiGroups: ['']
+    resources: [configmaps]
+    verbs: [create]
+  - apiGroups: ['']
+    resources: [configmaps]
+    resourceNames: [apps-gateway-site]
+    verbs: [get, patch, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: apps-gateway-inputs
+  namespace: flux-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: apps-gateway-inputs
+subjects:
+  - kind: ServiceAccount
+    name: apps-gateway-inputs
+    namespace: flux-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: apps-gateway-inputs
+  namespace: apps-gateway
+rules:
+  - apiGroups: ['']
+    resources: [secrets]
+    verbs: [create]
+  - apiGroups: ['']
+    resources: [secrets]
+    resourceNames: [apps-internal-tls]
+    verbs: [get, patch, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: apps-gateway-inputs
+  namespace: apps-gateway
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: apps-gateway-inputs
+subjects:
+  - kind: ServiceAccount
+    name: apps-gateway-inputs
+    namespace: flux-system
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: apps-gateway-inputs
+  namespace: flux-system
+spec:
+  suspend: true
+  interval: 1m
+  retryInterval: 30s
+  timeout: 2m
+  path: ./clusters/homelab/gateway/inputs
+  sourceRef:
+    kind: GitRepository
+    name: homelab-private
+  serviceAccountName: apps-gateway-inputs
+  decryption:
+    provider: sops
+    secretRef:
+      name: sops-age
+  prune: false
+  deletionPolicy: Orphan
+  force: false
+  wait: false
+  # Block the public gateway until the separately issued TLS input exists.
+  healthChecks:
+    - apiVersion: v1
+      kind: Secret
+      name: apps-internal-tls
+      namespace: apps-gateway

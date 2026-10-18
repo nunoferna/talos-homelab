@@ -1,0 +1,20 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: apps-gateway-prerequisites
+  namespace: flux-system
+spec:
+  interval: 1m
+  retryInterval: 30s
+  timeout: 2m
+  path: ./platform/apps-gateway/preparation
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  dependsOn:
+    - name: gateway-api-crds
+  prune: false
+  deletionPolicy: Orphan
+  force: false
+  # Preparation contains deliberately suspended child reconcilers, not workloads.
+  wait: false
