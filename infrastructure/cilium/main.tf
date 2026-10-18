@@ -2,6 +2,12 @@ locals {
   release     = yamldecode(file("${path.module}/release.yaml"))
   values_file = "${path.module}/values.yaml"
   gateway_values = var.enable_gateway_api ? [yamlencode({
+    rollOutCiliumPods = true
+    operator          = { rollOutPods = true }
+    updateStrategy = {
+      type          = "RollingUpdate"
+      rollingUpdate = { maxUnavailable = 1 }
+    }
     gatewayAPI = {
       enabled               = true
       gatewayClass          = { create = true }
