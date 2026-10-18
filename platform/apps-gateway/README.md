@@ -1,6 +1,6 @@
 # Internal apps gateway
 
-Preparation only: both Flux Kustomizations are suspended. Merging creates no
+Preparation only: both activation Kustomizations are suspended. Merging creates no
 Gateway, IP pool, L2 policy or application route.
 
 Public Git owns the HTTPS-only shared Gateway and narrowly selected Cilium
