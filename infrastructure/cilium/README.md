@@ -53,7 +53,10 @@ When intentionally changing values, review the rendered chart and update the
 checksum in the same commit.
 
 Day-two gateway support is a separate `enable_gateway_api` opt-in, default off.
-It overlays only Gateway API/L2 settings; the pinned base values are unchanged.
+It overlays Gateway API/L2 settings and enables checksum-triggered agent/operator
+rollouts so those settings take effect; the pinned base values are unchanged.
+Agent rollouts allow at most one unavailable pod. Applying the opt-in or later
+config changes can briefly interrupt networking.
 Install the [Gateway API prerequisites](../../platform/gateway-api/README.md)
 first. The private workflow reads the opt-in from its reviewed
 `cilium/features.json`; never bypass saved-plan approval or manually upgrade Helm.
