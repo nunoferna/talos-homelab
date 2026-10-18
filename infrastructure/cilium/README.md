@@ -51,3 +51,9 @@ history. Ordinary plans must not replace or delete it.
 values checksum prevents an unreviewed values-file edit from reaching Helm.
 When intentionally changing values, review the rendered chart and update the
 checksum in the same commit.
+
+Day-two gateway support is a separate `enable_gateway_api` opt-in, default off.
+It overlays only Gateway API/L2 settings; the pinned base values are unchanged.
+Install the [Gateway API prerequisites](../../platform/gateway-api/README.md)
+first. The private workflow reads the opt-in from its reviewed
+`cilium/features.json`; never bypass saved-plan approval or manually upgrade Helm.

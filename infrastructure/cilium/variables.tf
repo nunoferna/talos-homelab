@@ -1,3 +1,10 @@
+variable "enable_gateway_api" {
+  description = "Day-two opt-in to Cilium Gateway API and L2 announcements. Install the pinned Gateway API CRDs first; false preserves day-zero bootstrap."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
 variable "state_passphrase" {
   description = "Independently backed-up encryption secret, supplied locally at runtime. Never store it in Git, tfvars, or backend configuration."
   type        = string

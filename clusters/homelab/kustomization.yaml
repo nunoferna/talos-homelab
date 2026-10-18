@@ -6,3 +6,4 @@ resources:
   - ../../platform/private-sync
   - ../../platform/external-secrets
   - ../../platform/openbao
+  - ../../platform/gateway-api
