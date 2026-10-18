@@ -1,0 +1,20 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: gateway-api-upstream
+  namespace: flux-system
+spec:
+  interval: 24h
+  timeout: 2m
+  url: https://github.com/kubernetes-sigs/gateway-api.git
+  ref:
+    # Gateway API v1.6.1, required by the pinned Cilium 1.20.2 documentation.
+    commit: 8bb74df00e56ec8f944d48c25e6c1c9c2f6848e3
+  sparseCheckout:
+    - config/crd/standard
+  # Keep only the seven required standard CRDs. No optional routes or admission policy.
+  ignore: |
+    /config/crd/standard/gateway.networking.k8s.io_listenersets.yaml
+    /config/crd/standard/gateway.networking.k8s.io_tcproutes.yaml
+    /config/crd/standard/gateway.networking.k8s.io_udproutes.yaml
+    /config/crd/standard/gateway.networking.k8s.io_vap_safeupgrades.yaml

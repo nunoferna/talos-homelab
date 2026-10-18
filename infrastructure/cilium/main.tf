@@ -1,6 +1,14 @@
 locals {
   release     = yamldecode(file("${path.module}/release.yaml"))
   values_file = "${path.module}/values.yaml"
+  gateway_values = var.enable_gateway_api ? [yamlencode({
+    gatewayAPI = {
+      enabled               = true
+      gatewayClass          = { create = true }
+      externalTrafficPolicy = "Cluster"
+    }
+    l2announcements = { enabled = true }
+  })] : []
 }
 
 provider "helm" {
@@ -16,7 +24,7 @@ resource "helm_release" "cilium" {
   chart      = local.release.chart
   version    = local.release.version
 
-  values = [file(local.values_file)]
+  values = concat([file(local.values_file)], local.gateway_values)
 
   timeout = 600
   wait    = true
