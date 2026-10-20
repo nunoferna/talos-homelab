@@ -11,7 +11,8 @@ the suspended TLS gateway inputs.
 
 Two replicas serve explicit records
 over LAN TCP/UDP 53, using Cilium IPAM/L2 with exact Service selectors. Pods bind
-1053 without capabilities, API RBAC or service-account tokens. Network policy
+1053 with only `NET_BIND_SERVICE`, required by the official binary's file
+capability even on a high port. No API RBAC or service-account tokens. Network policy
 permits LAN DNS and node-forwarded requests/probes, and denies egress. There is
 no recursive forwarding, Kubernetes plugin, wildcard or AAAA record. Node SNAT
 means the policy cannot distinguish the original LAN client on every path;
