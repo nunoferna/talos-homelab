@@ -3,13 +3,13 @@
 Separate CoreDNS for `apps.internal`, using the [official Helm chart](https://github.com/coredns/helm)
 1.49.0 / CoreDNS 1.14.7. This is not the Talos-owned `kube-system/coredns` deployment.
 
-Merging prepares a restricted namespace, a ConfigMap-only private-input identity,
-and **suspended** `apps-dns-inputs` / `apps-dns` reconcilers. No DNS workload,
-Service or address advertisement is activated. Private site values supply the
-reserved LAN address, interface, client CIDR, SOA serial and HTTPS gateway address.
-There is no dependency on the suspended TLS gateway inputs.
+Flux enables `apps-dns-inputs` before `apps-dns` using an explicit dependency.
+The ConfigMap-only private-input identity supplies the reserved LAN address,
+interface, client CIDR, SOA serial and HTTPS gateway address. The public workload
+then deploys DNS and advertises its reserved address. There is no dependency on
+the suspended TLS gateway inputs.
 
-After a separately reviewed activation, two replicas serve explicit records
+Two replicas serve explicit records
 over LAN TCP/UDP 53, using Cilium IPAM/L2 with exact Service selectors. Pods bind
 1053 without capabilities, API RBAC or service-account tokens. Network policy
 permits LAN DNS and node-forwarded requests/probes, and denies egress. There is
