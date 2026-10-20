@@ -1,0 +1,12 @@
+apiVersion: cilium.io/v2
+kind: CiliumLoadBalancerIPPool
+metadata:
+  name: apps-dns
+spec:
+  blocks:
+    - start: '${APPS_DNS_IPV4}'
+      stop: '${APPS_DNS_IPV4}'
+  serviceSelector:
+    matchLabels:
+      io.kubernetes.service.namespace: apps-dns
+      io.kubernetes.service.name: apps-dns

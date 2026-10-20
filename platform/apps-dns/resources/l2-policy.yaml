@@ -1,0 +1,17 @@
+apiVersion: cilium.io/v2alpha1
+kind: CiliumL2AnnouncementPolicy
+metadata:
+  name: apps-dns
+spec:
+  serviceSelector:
+    matchLabels:
+      io.kubernetes.service.namespace: apps-dns
+      io.kubernetes.service.name: apps-dns
+  nodeSelector:
+    matchExpressions:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+  interfaces:
+    - '${APPS_DNS_INTERFACE_REGEX}'
+  externalIPs: false
+  loadBalancerIPs: true

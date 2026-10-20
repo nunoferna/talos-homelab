@@ -1,0 +1,132 @@
+---
+- name: Preview or explicitly manage only the Mac apps.internal resolver
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  gather_subset: [min]
+  become: false
+  vars:
+    apps_dns_mac_operation: preview
+    apps_dns_site_file: "{{ lookup('ansible.builtin.env', 'APPS_DNS_SITE_FILE') }}"
+    apps_dns_mac_path: /etc/resolver/apps.internal
+    apps_dns_mac_marker: '# Managed by homelab Ansible: apps.internal only'
+  tasks:
+    - name: Require a bounded Mac operation and explicit private input
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['system'] == 'Darwin'
+          - apps_dns_mac_operation in ['preview', 'enable', 'disable']
+          - apps_dns_site_file.startswith('/')
+          - apps_dns_mac_path == '/etc/resolver/apps.internal'
+
+    - name: Load private DNS settings on the controller
+      ansible.builtin.include_vars:
+        file: "{{ apps_dns_site_file }}"
+        name: apps_dns_site
+
+    - name: Restrict the resolver to the intended suffix and IPv4 server
+      ansible.builtin.assert:
+        that:
+          - apps_dns_site.domain == 'apps.internal'
+          - apps_dns_site.lan_ip_reservation_confirmed | bool
+          - apps_dns_site.listen_ipv4 is match('^([0-9]{1,3}\.){3}[0-9]{1,3}$')
+          - (apps_dns_site.listen_ipv4.split('.') | map('int') | max) <= 255
+
+    - name: Inspect the resolver directory and file without following symlinks
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: false
+      loop: [/etc/resolver, "{{ apps_dns_mac_path }}"]
+      register: apps_dns_mac_stats
+
+    - name: Reject symlinks or unexpected resolver paths
+      ansible.builtin.assert:
+        that:
+          - not (item.stat.islnk | default(false))
+          - >-
+            not item.stat.exists or
+            (item.item == '/etc/resolver' and (item.stat.isdir | default(false))) or
+            (item.item == apps_dns_mac_path and (item.stat.isreg | default(false)) and item.stat.size < 4096)
+      loop: "{{ apps_dns_mac_stats.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Read an existing resolver file to verify ownership
+      ansible.builtin.slurp:
+        src: "{{ apps_dns_mac_path }}"
+      when: apps_dns_mac_stats.results[1].stat.exists
+      register: apps_dns_mac_existing
+
+    - name: Refuse overwriting or deleting an unmanaged resolver file
+      ansible.builtin.assert:
+        that:
+          - >-
+            not apps_dns_mac_stats.results[1].stat.exists or
+            (apps_dns_mac_existing.content | b64decode).startswith(apps_dns_mac_marker ~ '\n')
+
+    - name: Report the read-only boundary
+      ansible.builtin.debug:
+        msg: >-
+          Operation {{ apps_dns_mac_operation }}; only {{ apps_dns_mac_path }}
+          may change after explicit approval. Default DNS, Wi-Fi, DHCP, trust
+          settings, router and cluster DNS remain untouched.
+
+    - name: Enable only after explicit approval and successful direct DNS queries
+      when: apps_dns_mac_operation == 'enable'
+      block:
+        - name: Reject check mode for a real resolver activation
+          ansible.builtin.assert:
+            that: [not ansible_check_mode]
+
+        - name: Verify application DNS returns the reviewed address over UDP and TCP
+          ansible.builtin.command:
+            argv: >-
+              {{ ['/usr/bin/dig', '@' ~ apps_dns_site.listen_ipv4,
+              'keycloak.apps.internal.', 'A', '+short', '+time=2', '+tries=1'] + item }}
+          changed_when: false
+          register: apps_dns_mac_direct_query
+          failed_when: >-
+            apps_dns_mac_direct_query.rc != 0 or
+            apps_dns_mac_direct_query.stdout != apps_dns_site.records.keycloak
+          loop: [[], ['+tcp']]
+
+        - name: Create the standard resolver directory if absent
+          ansible.builtin.file:
+            path: /etc/resolver
+            state: directory
+            owner: root
+            group: wheel
+            mode: '0755'
+          become: true
+          when: not apps_dns_mac_stats.results[0].stat.exists
+
+        - name: Write only the managed domain-specific resolver
+          ansible.builtin.copy:
+            dest: "{{ apps_dns_mac_path }}"
+            owner: root
+            group: wheel
+            mode: '0644'
+            content: |
+              {{ apps_dns_mac_marker }}
+              domain apps.internal
+              nameserver {{ apps_dns_site.listen_ipv4 }}
+              timeout 2
+          become: true
+
+        - name: Verify the macOS system resolver sees the application address
+          ansible.builtin.command:
+            argv: [/usr/bin/dscacheutil, '-q', host, '-a', name, keycloak.apps.internal]
+          changed_when: false
+          register: apps_dns_mac_system_query
+          until: >-
+            (apps_dns_mac_system_query.stdout_lines |
+            select('equalto', 'ip_address: ' ~ apps_dns_site.records.keycloak) | list | length) > 0
+          retries: 10
+          delay: 3
+
+    - name: Remove only the ownership-verified resolver during rollback
+      ansible.builtin.file:
+        path: "{{ apps_dns_mac_path }}"
+        state: absent
+      become: true
+      when: apps_dns_mac_operation == 'disable'
