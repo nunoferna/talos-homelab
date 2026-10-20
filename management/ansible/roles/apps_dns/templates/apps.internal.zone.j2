@@ -1,0 +1,10 @@
+$ORIGIN {{ apps_dns_site.domain }}.
+$TTL 30
+@ IN SOA ns.{{ apps_dns_site.domain }}. hostmaster.{{ apps_dns_site.domain }}. (
+    {{ apps_dns_site.serial }} 3600 600 86400 30
+)
+@ IN NS ns.{{ apps_dns_site.domain }}.
+ns IN A {{ apps_dns_site.listen_ipv4 }}
+{% for name, address in apps_dns_site.records | dictsort %}
+{{ name }} IN A {{ address }}
+{% endfor %}

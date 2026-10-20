@@ -1,0 +1,25 @@
+---
+- name: Preview or explicitly manage the Pi apps.internal DNS service
+  hosts: provisioning
+  gather_facts: false
+  become: false
+  vars:
+    apps_dns_site_file: "{{ lookup('ansible.builtin.env', 'APPS_DNS_SITE_FILE') }}"
+  pre_tasks:
+    - name: Require explicit SSH and private site inputs
+      ansible.builtin.assert:
+        that:
+          - ansible_host | length > 0
+          - ansible_user | length > 0
+          - apps_dns_site_file.startswith('/')
+
+    - name: Load private site values on the controller
+      ansible.builtin.include_vars:
+        file: "{{ apps_dns_site_file }}"
+        name: apps_dns_site
+
+    - name: Gather read-only operating system and network facts
+      ansible.builtin.setup:
+        gather_subset: ['!all', min, network]
+  roles:
+    - apps_dns
