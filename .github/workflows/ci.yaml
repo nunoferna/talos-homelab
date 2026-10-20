@@ -56,7 +56,6 @@ jobs:
           ansible-playbook --syntax-check recovery-runner-tools.yaml
           ansible-playbook --syntax-check recovery-github-environments.yaml
           ansible-playbook --syntax-check talos-backup-access-preview.yaml
-          ansible-playbook --syntax-check apps-dns.yaml
           ansible-playbook --syntax-check apps-dns-mac.yaml
       - name: Compile Python
         run: >-

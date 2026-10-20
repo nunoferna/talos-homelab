@@ -1,0 +1,36 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: apps-dns
+  namespace: apps-dns
+spec:
+  enableDefaultDeny:
+    ingress: true
+    egress: true
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/instance: apps-dns
+      app.kubernetes.io/name: coredns
+  ingress:
+    - fromCIDR:
+        - '${APPS_DNS_LAN_CIDR}'
+      toPorts:
+        - ports:
+            - port: '1053'
+              protocol: UDP
+            - port: '1053'
+              protocol: TCP
+    # Cluster externalTrafficPolicy may SNAT forwarded LAN requests to a node.
+    - fromEntities: [host, remote-node]
+      toPorts:
+        - ports:
+            - port: '1053'
+              protocol: UDP
+            - port: '1053'
+              protocol: TCP
+            - port: '8080'
+              protocol: TCP
+            - port: '8181'
+              protocol: TCP
+  # Authoritative files need no API, upstream DNS or other outbound traffic.
+  egress: []

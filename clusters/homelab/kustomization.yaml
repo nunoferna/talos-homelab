@@ -8,3 +8,4 @@ resources:
   - ../../platform/openbao
   - ../../platform/gateway-api
   - ../../platform/apps-gateway
+  - ../../platform/apps-dns
