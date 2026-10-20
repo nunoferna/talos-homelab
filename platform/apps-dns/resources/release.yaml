@@ -23,7 +23,7 @@ spec:
   postRenderers:
     - kustomize:
         patches:
-          # The upstream chart does not expose this Service setting.
+          # The upstream chart does not expose these Service settings.
           - target:
               version: v1
               kind: Service
@@ -32,6 +32,9 @@ spec:
               - op: add
                 path: /spec/allocateLoadBalancerNodePorts
                 value: false
+              - op: add
+                path: /spec/loadBalancerSourceRanges
+                value: ['${APPS_DNS_LAN_CIDR}']
   values:
     fullnameOverride: apps-dns
     isClusterService: false
@@ -51,6 +54,9 @@ spec:
       ipFamilyPolicy: SingleStack
       annotations:
         lbipam.cilium.io/ips: '${APPS_DNS_IPV4}'
+        # Do not install an alternate ClusterIP frontend outside the VIP guard.
+        service.cilium.io/type: LoadBalancer
+        service.cilium.io/src-ranges-policy: allow
     rollingUpdate:
       maxUnavailable: 0
       maxSurge: 1
