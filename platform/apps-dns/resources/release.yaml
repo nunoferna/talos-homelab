@@ -73,7 +73,8 @@ spec:
         type: RuntimeDefault
       capabilities:
         drop: [ALL]
-        add: []
+        # The official binary declares this file capability, even on port 1053.
+        add: [NET_BIND_SERVICE]
     resources:
       requests:
         cpu: 50m
