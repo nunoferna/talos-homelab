@@ -21,14 +21,13 @@ checks external source addresses at the VIP before SNAT. The explicit
 `service.cilium.io/type: LoadBalancer` annotation avoids an alternate ClusterIP
 frontend; NodePorts remain disabled. No cluster-wide routing change is needed.
 
-This is the first, fail-closed stage of the forwarding fix. Keep the pod policy
-unchanged until the VIP source-range maps and frontend types are verified on
-all agents. Cross-node DNS can still time out: VXLAN service traffic retains
-the `world` identity, which the current pod policy rejects. A separate reviewed
-change may then allow that identity only on DNS TCP/UDP 1053, never probe ports.
-Verify repeated UDP/TCP answers and an actual non-LAN denial before declaring
-the LAN boundary fully tested. Keep this Service guard when rolling back the
-later pod-policy change.
+Behind that guard, pod ingress accepts the VXLAN `world` identity only on DNS
+TCP/UDP 1053, never probe ports. Node DNS/probe access stays separate. An explicit
+egress deny blocks pod-initiated outbound connections; stateful DNS/probe replies
+remain allowed. Verify effective ingress/egress enforcement, repeated UDP/TCP
+answers and an actual non-LAN denial before declaring the boundary fully tested.
+When rolling back, remove the pod's `world` allowance first; retain the Service
+source-range guard until then. Never deploy that allowance without the guard.
 
 Source ranges do not restrict in-cluster clients or directly routed Pod IPs.
 Keep Pod networks unexposed and use pod policies for in-cluster access; router

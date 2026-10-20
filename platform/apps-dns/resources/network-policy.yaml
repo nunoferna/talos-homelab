@@ -12,15 +12,16 @@ spec:
       app.kubernetes.io/instance: apps-dns
       app.kubernetes.io/name: coredns
   ingress:
-    - fromCIDR:
-        - '${APPS_DNS_LAN_CIDR}'
+    # The Service source-range guard filters original external clients first.
+    # VXLAN retains world identity after cross-node Service SNAT.
+    - fromEntities: [world]
       toPorts:
         - ports:
             - port: '1053'
               protocol: UDP
             - port: '1053'
               protocol: TCP
-    # Cluster externalTrafficPolicy may SNAT forwarded LAN requests to a node.
+    # Node DNS diagnostics and kubelet probes; never world access to probes.
     - fromEntities: [host, remote-node]
       toPorts:
         - ports:
@@ -32,5 +33,7 @@ spec:
               protocol: TCP
             - port: '8181'
               protocol: TCP
-  # Authoritative files need no API, upstream DNS or other outbound traffic.
-  egress: []
+  # No pod-initiated API, upstream DNS or other outbound connections.
+  # Stateful replies to allowed inbound connections remain permitted.
+  egressDeny:
+    - toEntities: [all]
