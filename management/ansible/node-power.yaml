@@ -9,6 +9,9 @@
     cluster_power_confirmation: ''
     cluster_power_console_access_confirmed: false
     cluster_power_wol_firmware_confirmed: false
+    cluster_power_trial_node: ''
+    cluster_power_controller_only: false
+    cluster_power_validate_placement: true
     cluster_power_site_file: "{{ lookup('ansible.builtin.env', 'CLUSTER_POWER_SITE_FILE') }}"
     cluster_power_talosconfig: "{{ lookup('ansible.builtin.env', 'CLUSTER_POWER_TALOSCONFIG') }}"
     cluster_power_kubeconfig: "{{ lookup('ansible.builtin.env', 'CLUSTER_POWER_KUBECONFIG') }}"
@@ -18,6 +21,8 @@
         that:
           - not ansible_check_mode
           - cluster_power_operation in ['preview', 'shutdown-one', 'shutdown-for-bios', 'wake-one']
+          - not (cluster_power_controller_only | bool) or cluster_power_operation == 'preview'
+          - cluster_power_validate_placement | bool or cluster_power_operation == 'preview'
           - cluster_power_site_file.startswith('/')
           - cluster_power_talosconfig.startswith('/')
           - cluster_power_kubeconfig.startswith('/')
@@ -36,7 +41,7 @@
     - name: Define fixed trial targets and native command prefixes
       ansible.builtin.set_fact:
         cluster_power_nodes: '{{ cluster_power_inventory.homelab.nodes }}'
-        cluster_power_target: '{{ cluster_power_site.trial_node }}'
+        cluster_power_target: '{{ cluster_power_trial_node | default(cluster_power_site.trial_node, true) }}'
         cluster_power_kubectl:
           - kubectl
           - --kubeconfig
@@ -48,10 +53,10 @@
           - --talosconfig
           - '{{ cluster_power_talosconfig }}'
 
-    - name: Lock this first trial to cp03 and the reviewed Pi connection
+    - name: Restrict the trial to one reviewed node and the expected Pi connection
       ansible.builtin.assert:
         that:
-          - cluster_power_target == 'cp03'
+          - cluster_power_target in ['cp01', 'cp02', 'cp03']
           - cluster_power_nodes.keys() | sort == ['cp01', 'cp02', 'cp03']
           - cluster_power_site.cluster_uid is match('^[0-9a-f-]{36}$')
           - >-
@@ -129,18 +134,21 @@
           '-o=jsonpath={.clusters[0].cluster.server}'] }}
       changed_when: false
       register: cluster_power_api
+      when: not (cluster_power_controller_only | bool)
 
     - name: Read the cluster namespace identity
       ansible.builtin.command:
         argv: '{{ cluster_power_kubectl + ["get", "namespace", "kube-system", "-o=jsonpath={.metadata.uid}"] }}'
       changed_when: false
       register: cluster_power_cluster_uid
+      when: not (cluster_power_controller_only | bool)
 
     - name: Stop on a wrong cluster
       ansible.builtin.assert:
         that:
           - cluster_power_api.stdout == cluster_power_site.api_server
           - cluster_power_cluster_uid.stdout == cluster_power_site.cluster_uid
+      when: not (cluster_power_controller_only | bool)
 
     - name: Verify the Pi has the expected LAN address and broadcast without changing it
       connection: ssh
@@ -171,11 +179,13 @@
       vars:
         cluster_power_health_names: >-
           {{ ['cp01', 'cp02', 'cp03'] if cluster_power_probe.rc == 0 or
-          cluster_power_operation in ['shutdown-one', 'shutdown-for-bios'] else ['cp01', 'cp02'] }}
+          cluster_power_operation in ['shutdown-one', 'shutdown-for-bios'] else
+          (cluster_power_nodes.keys() | reject('equalto', cluster_power_target) | sort) }}
+      when: not (cluster_power_controller_only | bool)
 
     - name: Identify an online trial node before any shutdown
       ansible.builtin.include_tasks: tasks/node-power-identity.yaml
-      when: cluster_power_probe.rc == 0
+      when: cluster_power_probe.rc == 0 and not (cluster_power_controller_only | bool)
 
     - name: Require target online before shutdown
       ansible.builtin.assert:
@@ -185,12 +195,14 @@
     - name: Check the trial node has no movable persistent application data
       ansible.builtin.include_tasks: tasks/node-power-placement.yaml
       when: >-
-        cluster_power_operation in ['preview', 'shutdown-one', 'shutdown-for-bios'] and cluster_power_probe.rc == 0
+        cluster_power_operation in ['preview', 'shutdown-one', 'shutdown-for-bios'] and
+        cluster_power_probe.rc == 0 and not (cluster_power_controller_only | bool) and
+        cluster_power_validate_placement | bool
 
     - name: Explain supervised BIOS inspection without claiming firmware readiness
       ansible.builtin.debug:
         msg: >-
-          After cp03 has fully shut down, use its physical power button and press F10
+          After {{ cluster_power_target }} has fully shut down, use its physical power button and press F10
           to inspect BIOS. This operation sends no wake packet, changes no firmware
           settings and does not confirm Wake-on-LAN. Do not pull mains power.
       when: cluster_power_operation == 'shutdown-for-bios'
@@ -199,9 +211,12 @@
       ansible.builtin.debug:
         msg: >-
           {{ cluster_power_operation }} for {{ cluster_power_target }} only.
+          Controller-only preview: {{ cluster_power_controller_only | bool }}.
+          Single-node placement guard requested: {{ cluster_power_validate_placement | bool }}.
+          A controller-only preview does not establish cluster health.
           Preview sends no magic packet and changes no host. Talos credentials
-          remain on this Mac. No whole-cluster shutdown, force drain, etcd
-          membership change, reset, bootstrap or OpenBao unseal is implemented.
+          remain on this Mac. This node play does not perform whole-cluster shutdown,
+          force drain, etcd membership change, reset, bootstrap or OpenBao unseal.
 
     - name: Gracefully shut down only the authenticated trial node
       ansible.builtin.command:
@@ -215,7 +230,7 @@
     - name: Recheck survivors after shutdown without changing their state
       ansible.builtin.include_tasks: tasks/node-power-health.yaml
       vars:
-        cluster_power_health_names: [cp01, cp02]
+        cluster_power_health_names: '{{ cluster_power_nodes.keys() | reject("equalto", cluster_power_target) | sort }}'
       when: cluster_power_operation in ['shutdown-one', 'shutdown-for-bios']
 
     - name: Send the standard magic packet from the Pi only when the target API is absent

@@ -1,0 +1,77 @@
+---
+- name: Require completed preparation rather than infer quiescence from missing endpoints
+  ansible.builtin.assert:
+    that:
+      - >-
+        (cluster_lifecycle_live.reconciliation.metadata.annotations | default({})).get(
+        'homelab.local/power-phase', '') in ['prepared', 'shutdown-requested']
+
+- name: Recheck that the writer and PostgreSQL are stopped with original persistence retained
+  ansible.builtin.include_tasks: cluster-power-prepared.yaml
+
+- name: Authenticate every direct Talos endpoint before making the API unavailable
+  ansible.builtin.include_tasks: cluster-power-node-identity.yaml
+  loop: [cp01, cp02, cp03]
+  loop_control:
+    loop_var: cluster_lifecycle_node
+
+- name: Record shutdown intent in existing etcd before requesting any node operation
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: openbao
+        namespace: flux-system
+        uid: '{{ cluster_power_site.lifecycle.object_uids.reconciliation }}'
+        annotations:
+          homelab.local/power-phase: shutdown-requested
+  no_log: true
+
+- name: Explain the separately accepted Talos skip-drain behavior
+  ansible.builtin.debug:
+    msg: >-
+      Talos --force=true skips Kubernetes cordon/eviction, not orderly pod/service
+      shutdown or filesystem unmount. The application and database are already stopped.
+      Direct requests are launched together so losing API/etcd quorum cannot strand
+      the last node in a Kubernetes drain. A CLI timeout does not cancel shutdown;
+      never retry automatically, pull mains, reset, bootstrap or remove etcd members.
+
+- name: Launch direct orderly shutdown requests without waiting on another node's API
+  ansible.builtin.command:
+    argv: >-
+      {{ cluster_power_talosctl + ['--endpoints', cluster_power_nodes[item].intended_ip,
+      '--nodes', cluster_power_nodes[item].intended_ip,
+      'shutdown', '--force=true', '--wait', '--timeout=5m'] }}
+  loop: [cp01, cp02, cp03]
+  async: 360
+  poll: 0
+  changed_when: true
+  register: cluster_lifecycle_shutdown_jobs
+
+- name: Wait for each native shutdown result without retrying the operation
+  ansible.builtin.async_status:
+    jid: '{{ item.ansible_job_id }}'
+  loop: '{{ cluster_lifecycle_shutdown_jobs.results }}'
+  loop_control:
+    label: '{{ item.item }}'
+  register: cluster_lifecycle_shutdown_result
+  until: cluster_lifecycle_shutdown_result.finished
+  retries: 72
+  delay: 5
+
+- name: Check endpoint absence without calling that proof of physical power state
+  ansible.builtin.wait_for:
+    host: '{{ cluster_power_nodes[item].intended_ip }}'
+    port: 50000
+    state: stopped
+    connect_timeout: 2
+    timeout: 90
+  loop: [cp01, cp02, cp03]
+
+- name: Require physical shutdown observation and maintain the wake power path
+  ansible.builtin.debug:
+    msg: >-
+      Confirm all three power LEDs are off. Keep node mains power, Ethernet, switch,
+      Pi and router powered. Native shutdown results and closed ports cannot prove
+      physical power state. Use start to recover a partial shutdown; never bootstrap.

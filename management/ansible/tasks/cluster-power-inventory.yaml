@@ -1,0 +1,71 @@
+---
+- name: Define the bounded existing objects; no create or delete operations are supported
+  ansible.builtin.set_fact:
+    cluster_lifecycle_objects:
+      - {key: root, api: kustomize.toolkit.fluxcd.io/v1, kind: Kustomization, name: flux-system, ns: flux-system}
+      - {key: reconciliation, api: kustomize.toolkit.fluxcd.io/v1, kind: Kustomization, name: openbao, ns: flux-system}
+      - {key: server_release, api: helm.toolkit.fluxcd.io/v2, kind: HelmRelease, name: openbao, ns: openbao}
+      - {key: database_release, api: helm.toolkit.fluxcd.io/v2, kind: HelmRelease, name: openbao-db, ns: openbao}
+      - {key: server, api: apps/v1, kind: StatefulSet, name: openbao, ns: openbao}
+      - {key: database, api: postgresql.cnpg.io/v1, kind: Cluster, name: openbao-db, ns: openbao}
+      - {key: pvc, api: v1, kind: PersistentVolumeClaim, name: openbao-db-1, ns: openbao}
+      - {key: pv, api: v1, kind: PersistentVolume, name: openbao-postgresql-data, ns: ''}
+    cluster_lifecycle_live: {}
+
+- name: Read only non-Secret workload and persistence objects
+  kubernetes.core.k8s_info:
+    api_version: '{{ item.api }}'
+    kind: '{{ item.kind }}'
+    name: '{{ item.name }}'
+    namespace: '{{ item.ns | default(omit, true) }}'
+  loop: '{{ cluster_lifecycle_objects }}'
+  register: cluster_lifecycle_read
+  no_log: true
+
+- name: Refuse missing or replaced objects before any maintenance patch
+  ansible.builtin.assert:
+    that:
+      - item.resources | length == 1
+      - item.resources[0].metadata.uid == cluster_power_site.lifecycle.object_uids[item.item.key]
+  loop: '{{ cluster_lifecycle_read.results }}'
+  no_log: true
+
+- name: Retain objects in memory only for this invocation
+  ansible.builtin.set_fact:
+    cluster_lifecycle_live: '{{ cluster_lifecycle_live | combine({item.item.key: item.resources[0]}) }}'
+  loop: '{{ cluster_lifecycle_read.results }}'
+  no_log: true
+
+- name: Discover all PVCs rather than silently omit a new persistent workload
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: PersistentVolumeClaim
+  register: cluster_lifecycle_pvcs
+  no_log: true
+
+- name: Discover other StatefulSets and PostgreSQL clusters
+  kubernetes.core.k8s_info:
+    api_version: '{{ item.api }}'
+    kind: '{{ item.kind }}'
+  loop:
+    - {api: apps/v1, kind: StatefulSet}
+    - {api: postgresql.cnpg.io/v1, kind: Cluster}
+  register: cluster_lifecycle_stateful
+  no_log: true
+
+- name: Require exactly the known persistence boundary and retained bound volume
+  ansible.builtin.assert:
+    that:
+      - cluster_lifecycle_pvcs.resources | length == 1
+      - cluster_lifecycle_pvcs.resources[0].metadata.uid == cluster_power_site.lifecycle.object_uids.pvc
+      - cluster_lifecycle_stateful.results[0].resources | length == 1
+      - cluster_lifecycle_stateful.results[1].resources | length == 1
+      - cluster_lifecycle_live.database.spec.instances == 1
+      - >-
+        cluster_lifecycle_live.server.status.updateRevision ==
+        cluster_power_site.lifecycle.server_template_revision
+      - cluster_lifecycle_live.pvc.status.phase == 'Bound'
+      - cluster_lifecycle_live.pvc.spec.volumeName == cluster_lifecycle_live.pv.metadata.name
+      - cluster_lifecycle_live.pv.spec.claimRef.uid == cluster_lifecycle_live.pvc.metadata.uid
+      - cluster_lifecycle_live.pv.spec.persistentVolumeReclaimPolicy == 'Retain'
+    fail_msg: Persistence changed; extend and review the lifecycle plan instead of powering off unknown workloads.

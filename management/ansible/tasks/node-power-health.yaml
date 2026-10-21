@@ -13,6 +13,9 @@
       - "'node-role.kubernetes.io/control-plane' in (item.stdout | from_json).metadata.labels"
       - not ((item.stdout | from_json).spec.unschedulable | default(false))
       - >-
+        (item.stdout | from_json).status.nodeInfo.osImage ==
+        'Talos (' ~ cluster_power_nodes[item.item].installed_talos_version ~ ')'
+      - >-
         ((item.stdout | from_json).status.conditions | selectattr('type', 'equalto', 'Ready') |
         map(attribute='status') | list) == ['True']
       - >-
@@ -25,8 +28,8 @@
 - name: Query etcd membership through a surviving control plane
   ansible.builtin.command:
     argv: >-
-      {{ cluster_power_talosctl + ['--endpoints', cluster_power_nodes['cp01'].intended_ip,
-      '--nodes', cluster_power_nodes['cp01'].intended_ip, 'etcd', 'members'] }}
+      {{ cluster_power_talosctl + ['--endpoints', cluster_power_nodes[cluster_power_health_names[0]].intended_ip,
+      '--nodes', cluster_power_nodes[cluster_power_health_names[0]].intended_ip, 'etcd', 'members'] }}
   changed_when: false
   register: cluster_power_members
 
@@ -41,12 +44,14 @@
         (cluster_power_members.stdout_lines[1:] | map('split') | map(attribute=2) | sort) ==
         ['cp01', 'cp02', 'cp03']
       - >-
-        (cluster_power_members.stdout_lines[1:] | sort) ==
-        (cluster_power_initial_members | default(cluster_power_members.stdout_lines[1:] | sort))
+        (cluster_power_members.stdout_lines[1:] | map('regex_replace', '^\S+\s+', '') | sort) ==
+        (cluster_power_initial_members | default(
+        cluster_power_members.stdout_lines[1:] | map('regex_replace', '^\S+\s+', '') | sort))
 
 - name: Retain the initial voting identities for this operation only
   ansible.builtin.set_fact:
-    cluster_power_initial_members: '{{ cluster_power_members.stdout_lines[1:] | sort }}'
+    cluster_power_initial_members: >-
+      {{ cluster_power_members.stdout_lines[1:] | map('regex_replace', '^\S+\s+', '') | sort }}
 
 - name: Require exactly the three reviewed voting members and their peer addresses
   ansible.builtin.assert:
@@ -56,6 +61,9 @@
       - item.split()[3] == 'https://' ~ cluster_power_nodes[item.split()[2]].intended_ip ~ ':2380'
       - item.split()[4] == 'https://' ~ cluster_power_nodes[item.split()[2]].intended_ip ~ ':2379'
       - item.split()[5] == 'false'
+      - >-
+        item.split()[1] ==
+        (cluster_power_site.etcd_member_ids | default({})).get(item.split()[2], item.split()[1])
   loop: '{{ cluster_power_members.stdout_lines[1:] }}'
   loop_control:
     label: etcd voter

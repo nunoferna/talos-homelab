@@ -1,0 +1,40 @@
+---
+- name: Reread retained identities and state before crossing a lifecycle boundary
+  ansible.builtin.include_tasks: cluster-power-inventory.yaml
+
+- name: Require a protected, paused and fully hibernated application
+  ansible.builtin.assert:
+    that:
+      - cluster_lifecycle_live.reconciliation.spec.suspend | default(false) | bool
+      - >-
+        (cluster_lifecycle_live.reconciliation.metadata.annotations | default({})).get(
+        'kustomize.toolkit.fluxcd.io/reconcile', '') == 'disabled'
+      - >-
+        (cluster_lifecycle_live.reconciliation.metadata.annotations | default({})).get(
+        'homelab.local/power-phase', '') in ['preparing', 'prepared', 'shutdown-requested']
+      - cluster_lifecycle_live.server_release.spec.suspend | bool
+      - cluster_lifecycle_live.database_release.spec.suspend | bool
+      - cluster_lifecycle_live.server.spec.replicas == 0
+      - >-
+        (cluster_lifecycle_live.database.metadata.annotations | default({})).get('cnpg.io/hibernation', '') == 'on'
+      - >-
+        (cluster_lifecycle_live.database.status.conditions | default([]) |
+        selectattr('type', 'equalto', 'cnpg.io/hibernation') | map(attribute='status') | list) == ['True']
+
+- name: Verify neither the server nor PostgreSQL still has a pod
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: openbao
+    label_selectors: ['{{ item }}']
+  loop:
+    - app.kubernetes.io/name=openbao,component=server
+    - cnpg.io/cluster=openbao-db
+  register: cluster_lifecycle_stopped_pods
+  no_log: true
+
+- name: Reject remaining application or database pods, including terminating ones
+  ansible.builtin.assert:
+    that: [item.resources | length == 0]
+  loop: '{{ cluster_lifecycle_stopped_pods.results }}'
+  no_log: true

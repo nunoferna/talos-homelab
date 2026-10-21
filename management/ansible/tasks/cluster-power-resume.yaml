@@ -1,0 +1,161 @@
+---
+# A completed pause survives in existing etcd. Reuse it without waiting for
+# Git sources to download again before restoring the database.
+- name: Normalize only an incomplete owned preparation before reversing it
+  ansible.builtin.include_tasks: cluster-power-prepare.yaml
+  when: >-
+    (cluster_lifecycle_live.reconciliation.metadata.annotations | default({})).get(
+    'homelab.local/power-phase', '') == 'preparing'
+
+- name: Prove the owned pause and hibernation are intact before restoring persistence consumers
+  ansible.builtin.include_tasks: cluster-power-prepared.yaml
+
+- name: Rehydrate the existing PostgreSQL cluster without recreating persistence
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: postgresql.cnpg.io/v1
+      kind: Cluster
+      metadata:
+        name: openbao-db
+        namespace: openbao
+        uid: '{{ cluster_power_site.lifecycle.object_uids.database }}'
+        annotations:
+          cnpg.io/hibernation: null
+  no_log: true
+
+- name: Wait for the same PostgreSQL cluster to have one Ready instance
+  kubernetes.core.k8s_info:
+    api_version: postgresql.cnpg.io/v1
+    kind: Cluster
+    name: openbao-db
+    namespace: openbao
+  register: cluster_lifecycle_database_ready
+  until: >-
+    cluster_lifecycle_database_ready.resources | length == 1 and
+    cluster_lifecycle_database_ready.resources[0].metadata.uid == cluster_power_site.lifecycle.object_uids.database and
+    cluster_lifecycle_database_ready.resources[0].status.readyInstances | default(0) == 1 and
+    (cluster_lifecycle_database_ready.resources[0].status.conditions | default([]) |
+    selectattr('type', 'equalto', 'Ready') | map(attribute='status') | list) == ['True']
+  retries: 180
+  delay: 5
+  no_log: true
+
+- name: Recheck the original bound PVC and retained PV before starting the server
+  ansible.builtin.include_tasks: cluster-power-inventory.yaml
+
+- name: Start the existing single OpenBao server only after PostgreSQL is Ready
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: apps/v1
+      kind: StatefulSet
+      metadata:
+        name: openbao
+        namespace: openbao
+        uid: '{{ cluster_power_site.lifecycle.object_uids.server }}'
+      spec:
+        replicas: 1
+  no_log: true
+
+- name: Wait for OpenBao's process, not falsely for unsealed readiness
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    name: openbao-0
+    namespace: openbao
+  register: cluster_lifecycle_server_running
+  until: >-
+    cluster_lifecycle_server_running.resources | length == 1 and
+    cluster_lifecycle_server_running.resources[0].status.phase | default('') == 'Running' and
+    (cluster_lifecycle_server_running.resources[0].status.containerStatuses | default([]) |
+    selectattr('state.running', 'defined') | list | length) == 1
+  retries: 120
+  delay: 5
+  no_log: true
+
+- name: Refuse an existing token-helper home before the read-only OpenBao status command
+  ansible.builtin.command:
+    argv: >-
+      {{ cluster_power_kubectl + ['exec', '-n', 'openbao', 'openbao-0', '-c', 'openbao', '--',
+      '/bin/sh', '-ec',
+      'test ! -e /tmp/openbao-operator-no-token && test ! -L /tmp/openbao-operator-no-token'] }}
+  changed_when: false
+
+- name: Check native OpenBao status through verified loopback TLS with no operator token
+  ansible.builtin.command:
+    argv: >-
+      {{ cluster_power_kubectl + ['exec', '-n', 'openbao', 'openbao-0', '-c', 'openbao', '--',
+      'env', 'BAO_ADDR=https://127.0.0.1:8200', 'BAO_CACERT=/openbao/tls/ca.crt', 'BAO_SKIP_VERIFY=false',
+      'BAO_MAX_RETRIES=0', 'BAO_TOKEN=', 'BAO_NAMESPACE=', 'BAO_AGENT_ADDR=',
+      'HOME=/tmp/openbao-operator-no-token', 'bao', 'status', '-format=json'] }}
+  changed_when: false
+  register: cluster_lifecycle_bao_status
+  failed_when: cluster_lifecycle_bao_status.rc not in [0, 2]
+  no_log: true
+
+- name: Refuse a fresh or unexpected database instead of ever initializing OpenBao
+  ansible.builtin.assert:
+    that:
+      - (cluster_lifecycle_bao_status.stdout | from_json).initialized
+      - (cluster_lifecycle_bao_status.stdout | from_json).storage_type == 'postgresql'
+      - (cluster_lifecycle_bao_status.stdout | from_json).version == '2.7.1'
+
+- name: Restore the two Helm releases to their existing Git-declared reconciliation
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: helm.toolkit.fluxcd.io/v2
+      kind: HelmRelease
+      metadata:
+        name: '{{ item.name }}'
+        namespace: openbao
+        uid: '{{ cluster_power_site.lifecycle.object_uids[item.key] }}'
+      spec:
+        suspend: false
+  loop:
+    - {name: openbao, key: server_release}
+    - {name: openbao-db, key: database_release}
+  no_log: true
+
+- name: Wait for both resumed Helm controllers to acknowledge their current generation
+  kubernetes.core.k8s_info:
+    api_version: helm.toolkit.fluxcd.io/v2
+    kind: HelmRelease
+    name: '{{ item }}'
+    namespace: openbao
+  loop: [openbao-db, openbao]
+  register: cluster_lifecycle_release_ready
+  until: >-
+    cluster_lifecycle_release_ready.resources | length == 1 and
+    cluster_lifecycle_release_ready.resources[0].status.observedGeneration | default(0) ==
+    cluster_lifecycle_release_ready.resources[0].metadata.generation and
+    (cluster_lifecycle_release_ready.resources[0].status.conditions | default([]) |
+    selectattr('type', 'equalto', 'Ready') | map(attribute='status') | list) == ['True']
+  retries: 120
+  delay: 5
+  no_log: true
+
+- name: Remove only this workflow's pause and return OpenBao's leaf to Git ownership
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: openbao
+        namespace: flux-system
+        uid: '{{ cluster_power_site.lifecycle.object_uids.reconciliation }}'
+        annotations:
+          kustomize.toolkit.fluxcd.io/reconcile: null
+          homelab.local/power-phase: null
+      spec:
+        suspend: false
+  no_log: true
+
+- name: Resync normal Git ownership after application state has been restored
+  ansible.builtin.include_tasks: cluster-power-root-sync.yaml
+
+- name: Report only the non-secret unseal status
+  ansible.builtin.debug:
+    msg: >-
+      PostgreSQL restored and OpenBao initialized=true,
+      sealed={{ (cluster_lifecycle_bao_status.stdout | from_json).sealed }}.
+      Git reconciliation restored. Sealed is expected after this restart;
+      use the existing protected unseal workflow before declaring the platform ready.

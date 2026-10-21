@@ -61,6 +61,7 @@ jobs:
           ansible-playbook --syntax-check talos-backup-access-preview.yaml
           ansible-playbook --syntax-check apps-dns-mac.yaml
           ansible-playbook --syntax-check node-power.yaml
+          ansible-playbook --syntax-check cluster-power.yaml
       - name: Compile Python
         run: >-
           python -m py_compile

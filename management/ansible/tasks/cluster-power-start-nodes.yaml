@@ -1,0 +1,66 @@
+---
+- name: Probe direct Talos ports without depending on Kubernetes DNS or the API VIP
+  ansible.builtin.command:
+    argv: [/usr/bin/nc, '-z', '-G', '2', '{{ cluster_power_nodes[item].intended_ip }}', '50000']
+  loop: [cp01, cp02, cp03]
+  changed_when: false
+  failed_when: false
+  register: cluster_lifecycle_ports
+
+- name: Send all required magic packets before waiting for quorum
+  connection: ssh
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+  community.general.wakeonlan:
+    mac: '{{ cluster_power_nodes[item.item].mac }}'
+    broadcast: '{{ cluster_power_site.broadcast_ipv4 }}'
+    port: 9
+  delegate_to: pi500
+  loop: '{{ cluster_lifecycle_ports.results }}'
+  loop_control:
+    label: '{{ item.item }}'
+  when: item.rc != 0
+
+- name: Wait for each direct Talos API without issuing reset or bootstrap
+  ansible.builtin.wait_for:
+    host: '{{ cluster_power_nodes[item].intended_ip }}'
+    port: 50000
+    connect_timeout: 2
+    timeout: 300
+  loop: [cp01, cp02, cp03]
+
+- name: Read only the selected kubeconfig API server
+  ansible.builtin.command:
+    argv: >-
+      {{ cluster_power_kubectl + ['config', 'view', '--minify',
+      '-o=jsonpath={.clusters[0].cluster.server}'] }}
+  changed_when: false
+  register: cluster_lifecycle_api
+
+- name: Wait for the original namespace identity after quorum is restored
+  ansible.builtin.command:
+    argv: >-
+      {{ cluster_power_kubectl + ['get', 'namespace', 'kube-system',
+      '--request-timeout=5s', '-o=jsonpath={.metadata.uid}'] }}
+  changed_when: false
+  register: cluster_lifecycle_cluster_uid
+  until: cluster_lifecycle_cluster_uid.rc == 0
+  retries: 60
+  delay: 5
+
+- name: Refuse another API or a recreated Kubernetes cluster before any Kubernetes write
+  ansible.builtin.assert:
+    that:
+      - cluster_lifecycle_api.stdout == cluster_power_site.api_server
+      - cluster_lifecycle_cluster_uid.stdout == cluster_power_site.cluster_uid
+
+- name: Authenticate each live boot and its Kubernetes readiness
+  ansible.builtin.include_tasks: cluster-power-node-identity.yaml
+  loop: [cp01, cp02, cp03]
+  loop_control:
+    loop_var: cluster_lifecycle_node
+
+- name: Require all original voting members healthy before restoring application state
+  ansible.builtin.include_tasks: node-power-health.yaml
+  vars:
+    cluster_power_health_names: [cp01, cp02, cp03]

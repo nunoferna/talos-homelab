@@ -1,0 +1,7 @@
+---
+- name: Select one expected node for the shared authenticated identity check
+  ansible.builtin.set_fact:
+    cluster_power_target: '{{ cluster_lifecycle_node }}'
+
+- name: Authenticate chassis, permanent NIC, magic wake and current-boot Kubernetes readiness
+  ansible.builtin.include_tasks: node-power-identity.yaml

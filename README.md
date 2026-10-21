@@ -30,9 +30,12 @@ repository or independently secured storage.
   not reconciled or scheduled yet. See its [activation runbook](platform/backup/talos/README.md).
 - `management/ansible/`: narrowly scoped provisioning-host discovery and
   single-node PXE staging tools. `node-power.yaml` adds a preview-by-default
-  single-node shutdown/Wake-on-LAN trial; live inputs and operator steps stay private.
+  single-node shutdown/Wake-on-LAN trial; select one reviewed node explicitly.
+  `cluster-power.yaml` prepares whole-cluster maintenance with native CNPG hibernation,
+  retained storage and a separate unseal step. Full shutdown is disabled in private inputs
+  until all nodes pass cold wake. Live inputs and essential operator commands stay private.
   Its supervised `shutdown-for-bios` operation requires physical console access
-  and the confirmation `shutdown-for-bios-cp03`, without claiming firmware readiness.
+  and a target-specific confirmation, without claiming firmware readiness.
   After graceful shutdown, manually power on and press F10 to inspect BIOS;
   this operation neither changes BIOS settings nor sends wake packets.
 - `inventory/homelab.example.yaml`: documentation-only inventory using the

@@ -1,0 +1,154 @@
+---
+- name: Gate lifecycle intent before contacting any host
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+  tasks:
+    - name: Require a supported explicit operation without check-mode side effects
+      ansible.builtin.assert:
+        that:
+          - not ansible_check_mode
+          - cluster_lifecycle_operation | default('preview') in ['preview', 'prepare-off', 'shutdown', 'start']
+          - cluster_power_operation | default('preview') == 'preview'
+          - >-
+            not (cluster_power_controller_only | default(false) | bool) or
+            cluster_lifecycle_operation | default('preview') == 'start'
+
+    - name: Require fresh operator intent, physical fallback and independent unseal custody
+      ansible.builtin.assert:
+        that:
+          - >-
+            cluster_lifecycle_confirmation | default('') ==
+            'approve-cluster-' ~ cluster_lifecycle_operation ~ '-homelab'
+          - cluster_lifecycle_console_access_confirmed | default(false) | bool
+          - cluster_lifecycle_maintenance_window_confirmed | default(false) | bool
+          - cluster_lifecycle_unseal_custody_confirmed | default(false) | bool
+      when: cluster_lifecycle_operation | default('preview') != 'preview'
+
+    - name: Select controller-only preflight when the cluster may be powered off
+      ansible.builtin.set_fact:
+        cluster_lifecycle_intent: '{{ cluster_lifecycle_operation | default("preview") }}'
+        cluster_power_controller_only: '{{ cluster_lifecycle_operation | default("preview") == "start" }}'
+        # The lifecycle has its own whole-cluster persistence inventory and quiescence gate.
+        # Only a read-only node preview may omit that node-specific eviction check.
+        cluster_power_validate_placement: false
+
+- name: Reuse the credential, Pi and cluster identity boundary without a node operation
+  ansible.builtin.import_playbook: node-power.yaml
+
+- name: Coordinate the bounded PostgreSQL-backed OpenBao lifecycle
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+  vars:
+    ansible_python_interpreter: '{{ ansible_playbook_python }}'
+    ansible_async_dir: '{{ (cluster_power_talosctl[2] | dirname) ~ "/../power-async" }}'
+  module_defaults:
+    group/kubernetes.core.k8s:
+      kubeconfig: '{{ cluster_power_kubectl[2] }}'
+      context: '{{ cluster_power_site.kubernetes_context }}'
+      validate_certs: true
+    kubernetes.core.k8s:
+      state: patched
+      merge_type: [merge]
+  tasks:
+    - name: Require reviewed site identity pins and exact original etcd voters
+      ansible.builtin.assert:
+        that:
+          - cluster_power_site.lifecycle.object_uids.keys() | length == 8
+          - cluster_power_site.etcd_member_ids.keys() | sort == ['cp01', 'cp02', 'cp03']
+          - cluster_power_inventory.homelab.name == 'homelab'
+
+    - name: Validate every reviewed MAC and address before any multi-node wake packet
+      ansible.builtin.assert:
+        that:
+          - item.value.reservation_confirmed | bool
+          - item.value.mac is match('^([0-9a-f]{2}:){5}[0-9a-f]{2}$')
+          - item.value.chassis_serial | length > 0
+          - item.value.installed_talos_version == 'v1.14.1'
+          - item.value.intended_ip != cluster_power_inventory.homelab.network.kubernetes_vip
+          - item.value.intended_ip != hostvars['pi500'].ansible_host
+      loop: '{{ cluster_power_nodes | dict2items }}'
+      loop_control:
+        label: '{{ item.key }}'
+
+    - name: Reject duplicated node addresses or MAC identities
+      ansible.builtin.assert:
+        that:
+          - cluster_power_nodes.values() | map(attribute='intended_ip') | unique | list | length == 3
+          - cluster_power_nodes.values() | map(attribute='mac') | unique | list | length == 3
+
+    - name: Keep whole-cluster shutdown disabled until every node has passed cold wake
+      ansible.builtin.assert:
+        that:
+          - cluster_power_site.lifecycle.full_cluster_enabled | bool
+          - cluster_power_site.lifecycle.validated_wake_nodes | sort == ['cp01', 'cp02', 'cp03']
+          - cluster_lifecycle_skip_drain_confirmed | default(false) | bool
+        fail_msg: Whole-cluster shutdown needs reviewed activation, three proven cold wakes and skip-drain acceptance.
+      when: cluster_lifecycle_intent == 'shutdown'
+
+    - name: Require explicit acknowledgement of the reviewed application restart revision
+      ansible.builtin.assert:
+        that:
+          - >-
+            cluster_lifecycle_restart_revision | default('') ==
+            cluster_power_site.lifecycle.server_template_revision
+        fail_msg: Maintenance can activate an OnDelete update; explicitly acknowledge the pinned restart revision.
+      when: cluster_lifecycle_intent in ['prepare-off', 'start']
+
+    - name: Wake every absent node before waiting for Kubernetes or etcd quorum
+      ansible.builtin.include_tasks: tasks/cluster-power-start-nodes.yaml
+      when: cluster_lifecycle_intent == 'start'
+
+    - name: Read exact persistence and controller identities without Secret access
+      ansible.builtin.include_tasks: tasks/cluster-power-inventory.yaml
+
+    - name: Reject a maintenance pause not owned by this reviewed workflow
+      ansible.builtin.assert:
+        that:
+          - >-
+            (cluster_lifecycle_live.reconciliation.metadata.annotations | default({})).get(
+            'homelab.local/power-phase', '') in ['', 'preparing', 'prepared', 'shutdown-requested']
+          - >-
+            not ((cluster_lifecycle_live.reconciliation.metadata.annotations | default({})).get(
+            'kustomize.toolkit.fluxcd.io/reconcile', '') == 'disabled') or
+            (cluster_lifecycle_live.reconciliation.metadata.annotations | default({})).get(
+            'homelab.local/power-phase', '') != ''
+
+    - name: Describe preparation without changing desired state
+      ansible.builtin.debug:
+        msg: >-
+          Operation={{ cluster_lifecycle_intent }}. Validated cold wakes=
+          {{ cluster_power_site.lifecycle.validated_wake_nodes }}.
+          Whole-cluster shutdown enabled={{ cluster_power_site.lifecycle.full_cluster_enabled }}.
+          Maintenance phase={{ (cluster_lifecycle_live.reconciliation.metadata.annotations |
+          default({})).get('homelab.local/power-phase', 'normal') }}.
+          Server current={{ cluster_lifecycle_live.server.status.currentRevision }};
+          reviewed restart={{ cluster_lifecycle_live.server.status.updateRevision }}.
+          Preview changes nothing. Only OpenBao reconciliation is paused during maintenance;
+          no PVC, PV, database, identity, unseal key or Talos configuration is replaced.
+
+    - name: Prepare application shutdown using standard Kubernetes modules and CNPG hibernation
+      ansible.builtin.include_tasks: tasks/cluster-power-prepare.yaml
+      when: cluster_lifecycle_intent == 'prepare-off'
+
+    - name: Power off only a proven and explicitly quiesced cluster
+      ansible.builtin.include_tasks: tasks/cluster-power-shutdown.yaml
+      when: cluster_lifecycle_intent == 'shutdown'
+
+    - name: Restore database and application desired state after nodes are ready
+      ansible.builtin.include_tasks: tasks/cluster-power-resume.yaml
+      when: >-
+        cluster_lifecycle_intent == 'start' and
+        (cluster_lifecycle_live.reconciliation.metadata.annotations | default({})).get(
+        'homelab.local/power-phase', '') != ''
+
+    - name: Report the separate unseal boundary without reading any custody material
+      ansible.builtin.debug:
+        msg: >-
+          {{ cluster_lifecycle_intent }} finished. Startup is not application readiness:
+          after OpenBao restarts, use the existing protected private unseal workflow.
+          Never initialize it again. Do not supply an unseal key to this playbook or the Pi.
+      when: cluster_lifecycle_intent != 'preview'
