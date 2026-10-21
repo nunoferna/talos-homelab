@@ -31,6 +31,10 @@ repository or independently secured storage.
 - `management/ansible/`: narrowly scoped provisioning-host discovery and
   single-node PXE staging tools. `node-power.yaml` adds a preview-by-default
   single-node shutdown/Wake-on-LAN trial; live inputs and operator steps stay private.
+  Its supervised `shutdown-for-bios` operation requires physical console access
+  and the confirmation `shutdown-for-bios-cp03`, without claiming firmware readiness.
+  After graceful shutdown, manually power on and press F10 to inspect BIOS;
+  this operation neither changes BIOS settings nor sends wake packets.
 - `inventory/homelab.example.yaml`: documentation-only inventory using the
   RFC 5737 TEST-NET-1 range and locally administered example MAC addresses.
 - `docs/public-private-layout.md`: the required separation between public

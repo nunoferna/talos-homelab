@@ -17,7 +17,7 @@
       ansible.builtin.assert:
         that:
           - not ansible_check_mode
-          - cluster_power_operation in ['preview', 'shutdown-one', 'wake-one']
+          - cluster_power_operation in ['preview', 'shutdown-one', 'shutdown-for-bios', 'wake-one']
           - cluster_power_site_file.startswith('/')
           - cluster_power_talosconfig.startswith('/')
           - cluster_power_kubeconfig.startswith('/')
@@ -171,7 +171,7 @@
       vars:
         cluster_power_health_names: >-
           {{ ['cp01', 'cp02', 'cp03'] if cluster_power_probe.rc == 0 or
-          cluster_power_operation == 'shutdown-one' else ['cp01', 'cp02'] }}
+          cluster_power_operation in ['shutdown-one', 'shutdown-for-bios'] else ['cp01', 'cp02'] }}
 
     - name: Identify an online trial node before any shutdown
       ansible.builtin.include_tasks: tasks/node-power-identity.yaml
@@ -180,11 +180,20 @@
     - name: Require target online before shutdown
       ansible.builtin.assert:
         that: [cluster_power_probe.rc == 0]
-      when: cluster_power_operation == 'shutdown-one'
+      when: cluster_power_operation in ['shutdown-one', 'shutdown-for-bios']
 
     - name: Check the trial node has no movable persistent application data
       ansible.builtin.include_tasks: tasks/node-power-placement.yaml
-      when: cluster_power_operation in ['preview', 'shutdown-one'] and cluster_power_probe.rc == 0
+      when: >-
+        cluster_power_operation in ['preview', 'shutdown-one', 'shutdown-for-bios'] and cluster_power_probe.rc == 0
+
+    - name: Explain supervised BIOS inspection without claiming firmware readiness
+      ansible.builtin.debug:
+        msg: >-
+          After cp03 has fully shut down, use its physical power button and press F10
+          to inspect BIOS. This operation sends no wake packet, changes no firmware
+          settings and does not confirm Wake-on-LAN. Do not pull mains power.
+      when: cluster_power_operation == 'shutdown-for-bios'
 
     - name: Explain the bounded operation
       ansible.builtin.debug:
@@ -201,13 +210,13 @@
           '--nodes', cluster_power_nodes[cluster_power_target].intended_ip,
           'shutdown', '--force=false', '--wait', '--timeout=5m'] }}
       changed_when: true
-      when: cluster_power_operation == 'shutdown-one'
+      when: cluster_power_operation in ['shutdown-one', 'shutdown-for-bios']
 
     - name: Recheck survivors after shutdown without changing their state
       ansible.builtin.include_tasks: tasks/node-power-health.yaml
       vars:
         cluster_power_health_names: [cp01, cp02]
-      when: cluster_power_operation == 'shutdown-one'
+      when: cluster_power_operation in ['shutdown-one', 'shutdown-for-bios']
 
     - name: Send the standard magic packet from the Pi only when the target API is absent
       connection: ssh
