@@ -1,0 +1,151 @@
+---
+- name: Refuse a pre-existing pause or unsupported server replica count
+  ansible.builtin.assert:
+    that:
+      - cluster_lifecycle_live.server.spec.replicas in [0, 1]
+      - >-
+        (cluster_lifecycle_live.reconciliation.metadata.annotations | default({})).get(
+        'homelab.local/power-phase', '') != '' or
+        (not (cluster_lifecycle_live.reconciliation.spec.suspend | default(false) | bool) and
+        not (cluster_lifecycle_live.server_release.spec.suspend | bool) and
+        not (cluster_lifecycle_live.database_release.spec.suspend | bool) and
+        cluster_lifecycle_live.server.spec.replicas == 1 and
+        cluster_lifecycle_live.database.status.readyInstances | default(0) == 1 and
+        (cluster_lifecycle_live.database.metadata.annotations | default({})).get(
+        'cnpg.io/hibernation', '') in ['', 'off'])
+
+- name: Protect only OpenBao's reconciliation from its parent and mark maintenance ownership
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: openbao
+        namespace: flux-system
+        uid: '{{ cluster_power_site.lifecycle.object_uids.reconciliation }}'
+        annotations:
+          kustomize.toolkit.fluxcd.io/reconcile: disabled
+          homelab.local/power-phase: preparing
+      spec:
+        suspend: true
+  no_log: true
+
+- name: Ensure the parent has observed the per-resource pause before changing its children
+  ansible.builtin.include_tasks: cluster-power-root-sync.yaml
+
+- name: Pause only OpenBao and database Helm releases; keep the CNPG operator running
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: helm.toolkit.fluxcd.io/v2
+      kind: HelmRelease
+      metadata:
+        name: '{{ item.name }}'
+        namespace: openbao
+        uid: '{{ cluster_power_site.lifecycle.object_uids[item.key] }}'
+      spec:
+        suspend: true
+  loop:
+    - {name: openbao, key: server_release}
+    - {name: openbao-db, key: database_release}
+  no_log: true
+
+- name: Wait for the leaf and both Helm controllers to stop reconciling
+  kubernetes.core.k8s_info:
+    api_version: '{{ item.api }}'
+    kind: '{{ item.kind }}'
+    name: '{{ item.name }}'
+    namespace: '{{ item.ns }}'
+  loop:
+    - {api: kustomize.toolkit.fluxcd.io/v1, kind: Kustomization, name: openbao, ns: flux-system}
+    - {api: helm.toolkit.fluxcd.io/v2, kind: HelmRelease, name: openbao, ns: openbao}
+    - {api: helm.toolkit.fluxcd.io/v2, kind: HelmRelease, name: openbao-db, ns: openbao}
+  register: cluster_lifecycle_paused
+  until: >-
+    cluster_lifecycle_paused.resources | length == 1 and
+    cluster_lifecycle_paused.resources[0].spec.suspend | default(false) | bool and
+    (cluster_lifecycle_paused.resources[0].status.conditions | default([]) |
+    selectattr('type', 'equalto', 'Reconciling') | selectattr('status', 'equalto', 'True') | list | length) == 0
+  retries: 120
+  delay: 5
+  no_log: true
+
+- name: Stop the database writer before requesting PostgreSQL hibernation
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: apps/v1
+      kind: StatefulSet
+      metadata:
+        name: openbao
+        namespace: openbao
+        uid: '{{ cluster_power_site.lifecycle.object_uids.server }}'
+      spec:
+        replicas: 0
+  no_log: true
+
+- name: Wait until the OpenBao server pod is actually gone
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    name: openbao-0
+    namespace: openbao
+  register: cluster_lifecycle_server_stopped
+  until: cluster_lifecycle_server_stopped.resources | length == 0
+  retries: 120
+  delay: 5
+  no_log: true
+
+- name: Request CNPG's native declarative hibernation without deleting the Cluster or PVC
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: postgresql.cnpg.io/v1
+      kind: Cluster
+      metadata:
+        name: openbao-db
+        namespace: openbao
+        uid: '{{ cluster_power_site.lifecycle.object_uids.database }}'
+        annotations:
+          cnpg.io/hibernation: 'on'
+  no_log: true
+
+- name: Wait for PostgreSQL's confirmed clean hibernation within its existing stop delay
+  kubernetes.core.k8s_info:
+    api_version: postgresql.cnpg.io/v1
+    kind: Cluster
+    name: openbao-db
+    namespace: openbao
+  register: cluster_lifecycle_hibernated
+  until: >-
+    cluster_lifecycle_hibernated.resources | length == 1 and
+    (cluster_lifecycle_hibernated.resources[0].status.conditions | default([]) |
+    selectattr('type', 'equalto', 'cnpg.io/hibernation') | map(attribute='status') | list) == ['True']
+  retries: 420
+  delay: 5
+  no_log: true
+
+- name: Wait for every PostgreSQL pod to finish terminating before accepting hibernation
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: openbao
+    label_selectors: [cnpg.io/cluster=openbao-db]
+  register: cluster_lifecycle_database_stopped
+  until: cluster_lifecycle_database_stopped.resources | length == 0
+  retries: 420
+  delay: 5
+  no_log: true
+
+- name: Prove quiescence and unchanged retained persistence before marking preparation complete
+  ansible.builtin.include_tasks: cluster-power-prepared.yaml
+
+- name: Record completed preparation on the pinned reconciliation object
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: openbao
+        namespace: flux-system
+        uid: '{{ cluster_power_site.lifecycle.object_uids.reconciliation }}'
+        annotations:
+          homelab.local/power-phase: prepared
+  no_log: true

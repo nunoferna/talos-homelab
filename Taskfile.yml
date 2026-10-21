@@ -47,6 +47,7 @@ tasks:
       - yamllint .
       - for: [discover, prepare-artifacts, stage, activate, stop, test-proxy, runner, recovery-tools, node-power]
         cmd: cd management/ansible && ansible-playbook --syntax-check {{.ITEM}}.yaml
+      - cd management/ansible && ansible-playbook --syntax-check cluster-power.yaml
 
 # Activation intentionally uses the explicit reviewed command in the runbook.
 # Power operations also require explicit invocation; no automatic activation exists.

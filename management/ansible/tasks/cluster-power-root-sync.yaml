@@ -1,0 +1,37 @@
+---
+- name: Generate an opaque non-secret resync token
+  ansible.builtin.set_fact:
+    cluster_lifecycle_sync_token: '{{ lookup("ansible.builtin.pipe", "uuidgen") | trim }}'
+
+- name: Ask the existing Flux root to observe the protected maintenance boundary
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: flux-system
+        namespace: flux-system
+        uid: '{{ cluster_power_site.lifecycle.object_uids.root }}'
+        annotations:
+          reconcile.fluxcd.io/requestedAt: '{{ cluster_lifecycle_sync_token }}'
+  no_log: true
+
+- name: Wait for that exact root reconciliation to complete successfully
+  kubernetes.core.k8s_info:
+    api_version: kustomize.toolkit.fluxcd.io/v1
+    kind: Kustomization
+    name: flux-system
+    namespace: flux-system
+  register: cluster_lifecycle_root
+  until: >-
+    cluster_lifecycle_root.resources | length == 1 and
+    cluster_lifecycle_root.resources[0].metadata.uid == cluster_power_site.lifecycle.object_uids.root and
+    (cluster_lifecycle_root.resources[0].status.lastHandledReconcileAt | default('')) ==
+    cluster_lifecycle_sync_token and
+    (cluster_lifecycle_root.resources[0].status.conditions | default([]) |
+    selectattr('type', 'equalto', 'Ready') | map(attribute='status') | list) == ['True'] and
+    (cluster_lifecycle_root.resources[0].status.conditions | default([]) |
+    selectattr('type', 'equalto', 'Reconciling') | selectattr('status', 'equalto', 'True') | list | length) == 0
+  retries: 120
+  delay: 5
+  no_log: true
