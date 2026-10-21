@@ -1,0 +1,57 @@
+---
+- name: Authenticate trial hardware identity through its direct Talos endpoint
+  ansible.builtin.command:
+    argv: >-
+      {{ cluster_power_talosctl + ['--endpoints', cluster_power_nodes[cluster_power_target].intended_ip,
+      '--nodes', cluster_power_nodes[cluster_power_target].intended_ip, 'get', 'systeminformation', '-o=json'] }}
+  changed_when: false
+  register: cluster_power_hardware
+
+- name: Read the permanent trial NIC identity
+  ansible.builtin.command:
+    argv: >-
+      {{ cluster_power_talosctl + ['--endpoints', cluster_power_nodes[cluster_power_target].intended_ip,
+      '--nodes', cluster_power_nodes[cluster_power_target].intended_ip, 'get', 'links',
+      cluster_power_nodes[cluster_power_target].ethernet_link, '-o=json'] }}
+  changed_when: false
+  register: cluster_power_nic
+
+- name: Read the NIC Wake-on-LAN setting
+  ansible.builtin.command:
+    argv: >-
+      {{ cluster_power_talosctl + ['--endpoints', cluster_power_nodes[cluster_power_target].intended_ip,
+      '--nodes', cluster_power_nodes[cluster_power_target].intended_ip, 'get', 'ethernetstatus',
+      cluster_power_nodes[cluster_power_target].ethernet_link, '-o=json'] }}
+  changed_when: false
+  register: cluster_power_wol
+
+- name: Refuse an unexpected chassis, NIC or disabled magic-packet wake
+  ansible.builtin.assert:
+    that:
+      - >-
+        (cluster_power_hardware.stdout | from_json).spec.serialnumber ==
+        cluster_power_nodes[cluster_power_target].chassis_serial
+      - (cluster_power_nic.stdout | from_json).spec.permanentAddr == cluster_power_nodes[cluster_power_target].mac
+      - "'magic' in (cluster_power_wol.stdout | from_json).spec.wakeOnLAN"
+
+- name: Read the live kernel boot identity without any private configuration
+  ansible.builtin.command:
+    argv: >-
+      {{ cluster_power_talosctl + ['--endpoints', cluster_power_nodes[cluster_power_target].intended_ip,
+      '--nodes', cluster_power_nodes[cluster_power_target].intended_ip,
+      'read', '/proc/sys/kernel/random/boot_id'] }}
+  changed_when: false
+  register: cluster_power_boot_id
+
+- name: Wait for Kubernetes readiness belonging to this live boot
+  ansible.builtin.command:
+    argv: '{{ cluster_power_kubectl + ["get", "node", cluster_power_target, "-o=json"] }}'
+  changed_when: false
+  register: cluster_power_boot_node
+  until: >-
+    (cluster_power_boot_node.stdout | from_json).status.nodeInfo.bootID == (cluster_power_boot_id.stdout | trim) and
+    not ((cluster_power_boot_node.stdout | from_json).spec.unschedulable | default(false)) and
+    ((cluster_power_boot_node.stdout | from_json).status.conditions |
+    selectattr('type', 'equalto', 'Ready') | map(attribute='status') | list) == ['True']
+  retries: 24
+  delay: 5

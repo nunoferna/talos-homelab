@@ -29,7 +29,8 @@ repository or independently secured storage.
 - `platform/backup/talos/`: staged upstream encrypted etcd backup configuration;
   not reconciled or scheduled yet. See its [activation runbook](platform/backup/talos/README.md).
 - `management/ansible/`: narrowly scoped provisioning-host discovery and
-  single-node PXE staging tools.
+  single-node PXE staging tools. `node-power.yaml` adds a preview-by-default
+  single-node shutdown/Wake-on-LAN trial; live inputs and operator steps stay private.
 - `inventory/homelab.example.yaml`: documentation-only inventory using the
   RFC 5737 TEST-NET-1 range and locally administered example MAC addresses.
 - `docs/public-private-layout.md`: the required separation between public
@@ -50,6 +51,7 @@ and validate YAML, Ansible, Python, public manifests, and all four OpenTofu root
 Run the local checks from the repository root:
 
 ```sh
+ansible-galaxy collection install -r management/ansible/requirements.yaml -p .cache/ansible/collections
 yamllint .
 task validate
 tofu fmt -check -diff -recursive infrastructure

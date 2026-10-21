@@ -45,8 +45,8 @@ tasks:
     desc: Validate YAML and Ansible syntax without contacting hosts
     cmds:
       - yamllint .
-      - for: [discover, prepare-artifacts, stage, activate, stop, test-proxy, runner, recovery-tools]
+      - for: [discover, prepare-artifacts, stage, activate, stop, test-proxy, runner, recovery-tools, node-power]
         cmd: cd management/ansible && ansible-playbook --syntax-check {{.ITEM}}.yaml
 
 # Activation intentionally uses the explicit reviewed command in the runbook.
-# No install, reset, bootstrap, cluster or firmware commands exist in this phase.
+# Power operations also require explicit invocation; no automatic activation exists.

@@ -1,0 +1,237 @@
+---
+- name: Preview or explicitly operate the single-node power trial from the Mac
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+  vars:
+    cluster_power_operation: preview
+    cluster_power_confirmation: ''
+    cluster_power_console_access_confirmed: false
+    cluster_power_wol_firmware_confirmed: false
+    cluster_power_site_file: "{{ lookup('ansible.builtin.env', 'CLUSTER_POWER_SITE_FILE') }}"
+    cluster_power_talosconfig: "{{ lookup('ansible.builtin.env', 'CLUSTER_POWER_TALOSCONFIG') }}"
+    cluster_power_kubeconfig: "{{ lookup('ansible.builtin.env', 'CLUSTER_POWER_KUBECONFIG') }}"
+  tasks:
+    - name: Restrict operations before reading inputs or contacting any host
+      ansible.builtin.assert:
+        that:
+          - not ansible_check_mode
+          - cluster_power_operation in ['preview', 'shutdown-one', 'wake-one']
+          - cluster_power_site_file.startswith('/')
+          - cluster_power_talosconfig.startswith('/')
+          - cluster_power_kubeconfig.startswith('/')
+        fail_msg: Use preview; whole-cluster operations and check mode are not supported by this trial.
+
+    - name: Load non-secret site settings into a separate namespace
+      ansible.builtin.include_vars:
+        file: '{{ cluster_power_site_file }}'
+        name: cluster_power_site
+
+    - name: Reuse the existing private hardware inventory
+      ansible.builtin.include_vars:
+        file: '{{ (cluster_power_site_file | dirname) ~ "/../inventory/homelab.yaml" }}'
+        name: cluster_power_inventory
+
+    - name: Define fixed trial targets and native command prefixes
+      ansible.builtin.set_fact:
+        cluster_power_nodes: '{{ cluster_power_inventory.homelab.nodes }}'
+        cluster_power_target: '{{ cluster_power_site.trial_node }}'
+        cluster_power_kubectl:
+          - kubectl
+          - --kubeconfig
+          - '{{ cluster_power_kubeconfig }}'
+          - --context
+          - '{{ cluster_power_site.kubernetes_context }}'
+        cluster_power_talosctl:
+          - talosctl
+          - --talosconfig
+          - '{{ cluster_power_talosconfig }}'
+
+    - name: Lock this first trial to cp03 and the reviewed Pi connection
+      ansible.builtin.assert:
+        that:
+          - cluster_power_target == 'cp03'
+          - cluster_power_nodes.keys() | sort == ['cp01', 'cp02', 'cp03']
+          - cluster_power_site.cluster_uid is match('^[0-9a-f-]{36}$')
+          - >-
+            cluster_power_site.api_server ==
+            ('https://' ~ cluster_power_inventory.homelab.network.kubernetes_vip ~ ':6443')
+          - "'pi500' in hostvars"
+          - hostvars['pi500'].ansible_host == cluster_power_inventory.homelab.management.pi500.intended_ip
+          - hostvars['pi500'].ansible_user | length > 0
+          - cluster_power_nodes[cluster_power_target].reservation_confirmed | bool
+          - cluster_power_nodes[cluster_power_target].mac is match('^([0-9a-f]{2}:){5}[0-9a-f]{2}$')
+
+    - name: Require operator confirmation for every actual power operation
+      ansible.builtin.assert:
+        that:
+          - cluster_power_confirmation == cluster_power_operation ~ '-' ~ cluster_power_target
+          - cluster_power_console_access_confirmed | bool
+          - cluster_power_operation != 'shutdown-one' or cluster_power_wol_firmware_confirmed | bool
+      when: cluster_power_operation != 'preview'
+
+    - name: Identify the local controller without gathering private facts
+      ansible.builtin.command:
+        argv: [uname, '-s']
+      changed_when: false
+      register: cluster_power_os
+
+    - name: Read the operator uid
+      ansible.builtin.command:
+        argv: [id, '-u']
+      changed_when: false
+      register: cluster_power_uid
+
+    - name: Require the existing non-root Mac credential boundary
+      ansible.builtin.assert:
+        that:
+          - cluster_power_os.stdout == 'Darwin'
+          - cluster_power_uid.stdout | int != 0
+
+    - name: Inspect only credential metadata
+      ansible.builtin.stat:
+        path: '{{ item }}'
+        follow: false
+        get_checksum: false
+        get_mime: false
+      loop: ['{{ cluster_power_talosconfig }}', '{{ cluster_power_kubeconfig }}']
+      register: cluster_power_credentials
+
+    - name: Reject missing, symlinked, shared or foreign credential files
+      no_log: true
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.isreg
+          - not item.stat.islnk
+          - item.stat.mode == '0600'
+          - item.stat.uid == cluster_power_uid.stdout | int
+      loop: '{{ cluster_power_credentials.results }}'
+      loop_control:
+        label: credential metadata
+
+    - name: Read the native Talos client version
+      ansible.builtin.command:
+        argv: [talosctl, version, --client]
+      changed_when: false
+      register: cluster_power_version
+
+    - name: Pin the reviewed Talos CLI behavior
+      ansible.builtin.assert:
+        that:
+          - cluster_power_version.stdout is search('Tag:\s+v1\.14\.1(\s|$)')
+
+    - name: Identify the selected Kubernetes API without printing credentials
+      ansible.builtin.command:
+        argv: >-
+          {{ cluster_power_kubectl + ['config', 'view', '--minify',
+          '-o=jsonpath={.clusters[0].cluster.server}'] }}
+      changed_when: false
+      register: cluster_power_api
+
+    - name: Read the cluster namespace identity
+      ansible.builtin.command:
+        argv: '{{ cluster_power_kubectl + ["get", "namespace", "kube-system", "-o=jsonpath={.metadata.uid}"] }}'
+      changed_when: false
+      register: cluster_power_cluster_uid
+
+    - name: Stop on a wrong cluster
+      ansible.builtin.assert:
+        that:
+          - cluster_power_api.stdout == cluster_power_site.api_server
+          - cluster_power_cluster_uid.stdout == cluster_power_site.cluster_uid
+
+    - name: Verify the Pi has the expected LAN address and broadcast without changing it
+      connection: ssh
+      ansible.builtin.command:
+        argv: [ip, '-j', '-4', address, show]
+      delegate_to: pi500
+      changed_when: false
+      register: cluster_power_pi_addresses
+
+    - name: Restrict magic packets to the reviewed LAN broadcast
+      ansible.builtin.assert:
+        that:
+          - >-
+            (cluster_power_pi_addresses.stdout | from_json | map(attribute='addr_info') | flatten |
+            selectattr('local', 'equalto', hostvars['pi500'].ansible_host) |
+            selectattr('broadcast', 'defined') | map(attribute='broadcast') | list) ==
+            [cluster_power_site.broadcast_ipv4]
+
+    - name: Probe the trial Talos port without inferring physical power state
+      ansible.builtin.command:
+        argv: [/usr/bin/nc, '-z', '-G', '2', '{{ cluster_power_nodes[cluster_power_target].intended_ip }}', '50000']
+      changed_when: false
+      failed_when: false
+      register: cluster_power_probe
+
+    - name: Validate the two survivors and every expected-online node
+      ansible.builtin.include_tasks: tasks/node-power-health.yaml
+      vars:
+        cluster_power_health_names: >-
+          {{ ['cp01', 'cp02', 'cp03'] if cluster_power_probe.rc == 0 or
+          cluster_power_operation == 'shutdown-one' else ['cp01', 'cp02'] }}
+
+    - name: Identify an online trial node before any shutdown
+      ansible.builtin.include_tasks: tasks/node-power-identity.yaml
+      when: cluster_power_probe.rc == 0
+
+    - name: Require target online before shutdown
+      ansible.builtin.assert:
+        that: [cluster_power_probe.rc == 0]
+      when: cluster_power_operation == 'shutdown-one'
+
+    - name: Check the trial node has no movable persistent application data
+      ansible.builtin.include_tasks: tasks/node-power-placement.yaml
+      when: cluster_power_operation in ['preview', 'shutdown-one'] and cluster_power_probe.rc == 0
+
+    - name: Explain the bounded operation
+      ansible.builtin.debug:
+        msg: >-
+          {{ cluster_power_operation }} for {{ cluster_power_target }} only.
+          Preview sends no magic packet and changes no host. Talos credentials
+          remain on this Mac. No whole-cluster shutdown, force drain, etcd
+          membership change, reset, bootstrap or OpenBao unseal is implemented.
+
+    - name: Gracefully shut down only the authenticated trial node
+      ansible.builtin.command:
+        argv: >-
+          {{ cluster_power_talosctl + ['--endpoints', cluster_power_nodes[cluster_power_target].intended_ip,
+          '--nodes', cluster_power_nodes[cluster_power_target].intended_ip,
+          'shutdown', '--force=false', '--wait', '--timeout=5m'] }}
+      changed_when: true
+      when: cluster_power_operation == 'shutdown-one'
+
+    - name: Recheck survivors after shutdown without changing their state
+      ansible.builtin.include_tasks: tasks/node-power-health.yaml
+      vars:
+        cluster_power_health_names: [cp01, cp02]
+      when: cluster_power_operation == 'shutdown-one'
+
+    - name: Send the standard magic packet from the Pi only when the target API is absent
+      connection: ssh
+      community.general.wakeonlan:
+        mac: '{{ cluster_power_nodes[cluster_power_target].mac }}'
+        broadcast: '{{ cluster_power_site.broadcast_ipv4 }}'
+        port: 9
+      delegate_to: pi500
+      when: cluster_power_operation == 'wake-one' and cluster_power_probe.rc != 0
+
+    - name: Wait for the trial Talos API after an explicitly requested wake
+      ansible.builtin.wait_for:
+        host: '{{ cluster_power_nodes[cluster_power_target].intended_ip }}'
+        port: 50000
+        connect_timeout: 2
+        timeout: 180
+      when: cluster_power_operation == 'wake-one'
+
+    - name: Authenticate the awakened node and reject cached Kubernetes readiness
+      ansible.builtin.include_tasks: tasks/node-power-identity.yaml
+      when: cluster_power_operation == 'wake-one'
+
+    - name: Recheck all nodes and unchanged etcd membership after wake
+      ansible.builtin.include_tasks: tasks/node-power-health.yaml
+      vars:
+        cluster_power_health_names: [cp01, cp02, cp03]
+      when: cluster_power_operation == 'wake-one'

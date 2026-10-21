@@ -1,0 +1,85 @@
+---
+- name: Read expected-online Kubernetes nodes
+  ansible.builtin.command:
+    argv: '{{ cluster_power_kubectl + ["get", "node", item, "-o=json"] }}'
+  loop: '{{ cluster_power_health_names }}'
+  changed_when: false
+  register: cluster_power_kubernetes_nodes
+
+- name: Require Ready schedulable control planes with the reviewed addresses
+  no_log: true
+  ansible.builtin.assert:
+    that:
+      - "'node-role.kubernetes.io/control-plane' in (item.stdout | from_json).metadata.labels"
+      - not ((item.stdout | from_json).spec.unschedulable | default(false))
+      - >-
+        ((item.stdout | from_json).status.conditions | selectattr('type', 'equalto', 'Ready') |
+        map(attribute='status') | list) == ['True']
+      - >-
+        ((item.stdout | from_json).status.addresses | selectattr('type', 'equalto', 'InternalIP') |
+        map(attribute='address') | list) == [cluster_power_nodes[item.item].intended_ip]
+  loop: '{{ cluster_power_kubernetes_nodes.results }}'
+  loop_control:
+    label: '{{ item.item }}'
+
+- name: Query etcd membership through a surviving control plane
+  ansible.builtin.command:
+    argv: >-
+      {{ cluster_power_talosctl + ['--endpoints', cluster_power_nodes['cp01'].intended_ip,
+      '--nodes', cluster_power_nodes['cp01'].intended_ip, 'etcd', 'members'] }}
+  changed_when: false
+  register: cluster_power_members
+
+- name: Validate the pinned native membership table shape
+  ansible.builtin.assert:
+    that:
+      - cluster_power_members.stdout_lines | length == 4
+      - >-
+        cluster_power_members.stdout_lines[0].split() ==
+        ['NODE', 'ID', 'HOSTNAME', 'PEER', 'URLS', 'CLIENT', 'URLS', 'LEARNER']
+      - >-
+        (cluster_power_members.stdout_lines[1:] | map('split') | map(attribute=2) | sort) ==
+        ['cp01', 'cp02', 'cp03']
+      - >-
+        (cluster_power_members.stdout_lines[1:] | sort) ==
+        (cluster_power_initial_members | default(cluster_power_members.stdout_lines[1:] | sort))
+
+- name: Retain the initial voting identities for this operation only
+  ansible.builtin.set_fact:
+    cluster_power_initial_members: '{{ cluster_power_members.stdout_lines[1:] | sort }}'
+
+- name: Require exactly the three reviewed voting members and their peer addresses
+  ansible.builtin.assert:
+    that:
+      - item.split() | length == 6
+      - item.split()[2] in cluster_power_nodes
+      - item.split()[3] == 'https://' ~ cluster_power_nodes[item.split()[2]].intended_ip ~ ':2380'
+      - item.split()[4] == 'https://' ~ cluster_power_nodes[item.split()[2]].intended_ip ~ ':2379'
+      - item.split()[5] == 'false'
+  loop: '{{ cluster_power_members.stdout_lines[1:] }}'
+  loop_control:
+    label: etcd voter
+
+- name: Query native status on every expected-online etcd member
+  ansible.builtin.command:
+    argv: >-
+      {{ cluster_power_talosctl + ['--endpoints', cluster_power_nodes[item].intended_ip,
+      '--nodes', cluster_power_nodes[item].intended_ip, 'etcd', 'status'] }}
+  loop: '{{ cluster_power_health_names }}'
+  changed_when: false
+  register: cluster_power_etcd_status
+
+- name: Reject native status errors, learners, missing leaders or unapplied entries
+  no_log: true
+  ansible.builtin.assert:
+    that:
+      - item.stdout_lines | length == 2
+      # Talos 1.14.1 has no JSON output for etcd status; fail closed on shape changes.
+      - item.stdout_lines[1].split() | length == 14
+      - item.stdout_lines[1].split()[0] == cluster_power_nodes[item.item].intended_ip
+      - item.stdout_lines[1].split()[7] not in ['0', '0000000000000000']
+      - item.stdout_lines[1].split()[8] == item.stdout_lines[1].split()[10]
+      - item.stdout_lines[1].split()[11] == 'false'
+  loop: '{{ cluster_power_etcd_status.results }}'
+  loop_control:
+    label: '{{ item.item }}'
