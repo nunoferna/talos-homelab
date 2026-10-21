@@ -1,0 +1,35 @@
+---
+- name: Read trial-node pod placement without reading Secret contents
+  no_log: true
+  ansible.builtin.command:
+    argv: >-
+      {{ cluster_power_kubectl + ['get', 'pods', '--all-namespaces',
+      '--field-selector=spec.nodeName=' ~ cluster_power_target, '-o=json'] }}
+  changed_when: false
+  register: cluster_power_placement
+
+- name: Exclude static control-plane pods and DaemonSets from application eviction checks
+  ansible.builtin.set_fact:
+    cluster_power_application_pods: []
+
+- name: Select drainable application pods
+  no_log: true
+  ansible.builtin.set_fact:
+    cluster_power_application_pods: '{{ cluster_power_application_pods + [item] }}'
+  loop: "{{ (cluster_power_placement.stdout | from_json)['items'] }}"
+  loop_control:
+    label: '{{ item.metadata.namespace }}/{{ item.metadata.name }}'
+  when:
+    - "'kubernetes.io/config.mirror' not in (item.metadata.annotations | default({}))"
+    - "'DaemonSet' not in (item.metadata.ownerReferences | default([]) | map(attribute='kind') | list)"
+
+- name: Refuse StatefulSets, PVCs, hostPaths and unmanaged application pods
+  no_log: true
+  ansible.builtin.assert:
+    that:
+      - "'ReplicaSet' in (item.metadata.ownerReferences | default([]) | map(attribute='kind') | list)"
+      - item.spec.volumes | default([]) | selectattr('persistentVolumeClaim', 'defined') | list | length == 0
+      - item.spec.volumes | default([]) | selectattr('hostPath', 'defined') | list | length == 0
+  loop: '{{ cluster_power_application_pods }}'
+  loop_control:
+    label: '{{ item.metadata.namespace }}/{{ item.metadata.name }}'

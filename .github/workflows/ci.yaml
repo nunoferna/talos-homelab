@@ -44,7 +44,10 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-dev.txt
       - name: Install validation tools
-        run: python -m pip install --requirement requirements-dev.txt
+        run: |
+          python -m pip install --requirement requirements-dev.txt
+          ansible-galaxy collection install --requirements-file management/ansible/requirements.yaml \
+            --collections-path .cache/ansible/collections
       - name: Lint YAML
         run: yamllint .
       - name: Check Ansible syntax
@@ -57,6 +60,7 @@ jobs:
           ansible-playbook --syntax-check recovery-github-environments.yaml
           ansible-playbook --syntax-check talos-backup-access-preview.yaml
           ansible-playbook --syntax-check apps-dns-mac.yaml
+          ansible-playbook --syntax-check node-power.yaml
       - name: Compile Python
         run: >-
           python -m py_compile
