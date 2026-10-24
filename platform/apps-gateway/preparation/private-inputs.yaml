@@ -62,7 +62,7 @@ metadata:
   name: apps-gateway-inputs
   namespace: flux-system
 spec:
-  suspend: true
+  suspend: false
   interval: 1m
   retryInterval: 30s
   timeout: 2m

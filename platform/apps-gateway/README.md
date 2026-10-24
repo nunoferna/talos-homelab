@@ -1,7 +1,7 @@
 # Internal apps gateway
 
-Preparation only: both activation Kustomizations are suspended. Merging creates no
-Gateway, IP pool, L2 policy or application route.
+The Gateway stays suspended while private site inputs reconcile for certificate
+issuance. Merging creates no Gateway, IP pool, L2 policy or application route.
 
 Public Git owns the HTTPS-only shared Gateway and narrowly selected Cilium
 networking resources. Private Git supplies the reserved IPv4/interface settings

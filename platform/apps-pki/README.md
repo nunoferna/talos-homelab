@@ -1,13 +1,14 @@
 # Application certificate authority
 
-This stage installs cert-manager and enables its narrow PKI access prerequisites.
-Certificate reconciliation, private gateway inputs and gateway exposure remain
-suspended. OpenBao configuration and client trust require separate approval.
+cert-manager and its narrow PKI access prerequisites are enabled. This stage
+activates private site inputs and gateway certificate reconciliation after the
+approved OpenBao bootstrap. Gateway exposure remains suspended; client trust
+requires separate approval. Merge the paired private public-CA input first.
 
 The root signing key stays outside the cluster. OpenBao generates and retains a
 non-exported intermediate key; cert-manager submits gateway CSRs using short-lived,
 audience-bound Kubernetes authentication. The namespaced Issuer is limited to
-apps.internal server certificates. cert-manager will own
+apps.internal server certificates. cert-manager owns
 `apps-gateway/apps-internal-tls`, with 90-day certificates and renewal 30 days
 before expiry. Git never owns that leaf key.
 
