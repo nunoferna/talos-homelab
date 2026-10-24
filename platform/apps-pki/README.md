@@ -1,9 +1,9 @@
 # Application certificate authority
 
 cert-manager and its narrow PKI access prerequisites are enabled. This stage
-activates private site inputs and gateway certificate reconciliation after the
-approved OpenBao bootstrap. Gateway exposure remains suspended; client trust
-requires separate approval. Merge the paired private public-CA input first.
+reconciles private site inputs and gateway certificates after the approved
+OpenBao bootstrap. Gateway activation follows verified client trust in a separate
+operator step; it adds no application routes.
 
 The root signing key stays outside the cluster. OpenBao generates and retains a
 non-exported intermediate key; cert-manager submits gateway CSRs using short-lived,
