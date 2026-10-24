@@ -1,20 +1,22 @@
 # Application certificate authority
 
-Prepared, inactive: cert-manager, PKI access and certificate reconciliation are
-all suspended. No CA, OpenBao configuration or client trust changes on merge.
+This stage installs cert-manager and enables its narrow PKI access prerequisites.
+Certificate reconciliation, private gateway inputs and gateway exposure remain
+suspended. OpenBao configuration and client trust require separate approval.
 
 The root signing key stays outside the cluster. OpenBao generates and retains a
 non-exported intermediate key; cert-manager submits gateway CSRs using short-lived,
-audience-bound Kubernetes authentication. The namespaced Issuer can sign only the
-apps.internal server certificates. cert-manager owns `apps-gateway/apps-internal-tls`, with 90-day
-certificates and renewal 30 days before expiry. Git never owns that leaf key.
+audience-bound Kubernetes authentication. The namespaced Issuer is limited to
+apps.internal server certificates. cert-manager will own
+`apps-gateway/apps-internal-tls`, with 90-day certificates and renewal 30 days
+before expiry. Git never owns that leaf key.
 
-Before activation: approve new root issuance and custody, configure the OpenBao
-intermediate/auth/policy through the private `gateway/operator/pki.yaml` workflow, supply the public
-OpenBao TLS CA in private inputs, then activate the Issuer and verify Ready.
-The existing root is leaf-only (`pathlen:0`); preserve it and use a new root
-(`pathlen:1`) for this hierarchy. First bootstrap is a separate approved
-operator stage, not a root-token Kubernetes Job; later rotation needs separate review.
+Before activating issuance, configure the OpenBao intermediate/auth/policy through
+the private `gateway/operator/pki.yaml` workflow, supply the public OpenBao TLS CA
+in private inputs, then activate the Issuer and verify Ready. This requires a
+dedicated external root (`pathlen:1`) with verified off-cluster custody; preserve
+the legacy leaf-only root (`pathlen:0`). First bootstrap is a separate approved
+operator stage; later rotation needs separate review.
 
 OpenBao's own bootstrap TLS remains independent: cold startup and unseal must
 work while the application CA is unavailable. Existing valid gateway certificates

@@ -4,7 +4,7 @@ metadata:
   name: cert-manager
   namespace: flux-system
 spec:
-  suspend: true
+  suspend: false
   interval: 10m
   timeout: 5m
   path: ./platform/cert-manager/resources
