@@ -44,7 +44,6 @@
   become: false
   vars:
     ansible_python_interpreter: '{{ ansible_playbook_python }}'
-    ansible_async_dir: '{{ (cluster_power_talosctl[2] | dirname) ~ "/../power-async" }}'
   module_defaults:
     group/kubernetes.core.k8s:
       kubeconfig: '{{ cluster_power_kubectl[2] }}'
@@ -136,6 +135,9 @@
 
     - name: Power off only a proven and explicitly quiesced cluster
       ansible.builtin.include_tasks: tasks/cluster-power-shutdown.yaml
+      vars:
+        # Async shutdown jobs and their polling run on the Mac only.
+        ansible_async_dir: '{{ (cluster_power_talosctl[2] | dirname) ~ "/../power-async" }}'
       when: cluster_lifecycle_intent == 'shutdown'
 
     - name: Restore database and application desired state after nodes are ready
