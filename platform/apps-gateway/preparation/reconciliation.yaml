@@ -15,6 +15,7 @@ spec:
   dependsOn:
     - name: gateway-api-crds
     - name: apps-gateway-inputs
+    - name: apps-pki
   postBuild:
     substituteFrom:
       - kind: ConfigMap

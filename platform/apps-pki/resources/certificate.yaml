@@ -1,0 +1,21 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: apps-internal
+  namespace: apps-gateway
+spec:
+  secretName: apps-internal-tls
+  issuerRef:
+    name: openbao-apps-internal
+    kind: Issuer
+    group: cert-manager.io
+  dnsNames: ['*.apps.internal']
+  duration: 2160h
+  renewBefore: 720h
+  revisionHistoryLimit: 2
+  isCA: false
+  usages: [digital signature, server auth]
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always

@@ -1,0 +1,258 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: cert-manager
+  namespace: cert-manager
+spec:
+  interval: 10m
+  timeout: 5m
+  releaseName: cert-manager
+  chart:
+    spec:
+      chart: cert-manager
+      version: v1.21.3
+      sourceRef:
+        kind: HelmRepository
+        name: jetstack
+  install:
+    remediation:
+      retries: 1
+  upgrade:
+    remediation:
+      retries: 1
+  values:
+    crds:
+      enabled: true
+      keep: true
+    global:
+      leaderElection:
+        namespace: cert-manager
+      rbac:
+        aggregateClusterRoles: false
+    startupapicheck:
+      enabled: false
+    prometheus:
+      enabled: false
+    enableCertificateOwnerRef: false
+    approveSignerNames:
+      - issuers.cert-manager.io/apps-gateway.openbao-apps-internal
+    config:
+      apiVersion: controller.config.cert-manager.io/v1alpha1
+      kind: ControllerConfiguration
+      namespace: apps-gateway
+      controllers:
+        - issuers
+        - certificates-trigger
+        - certificates-issuing
+        - certificates-key-manager
+        - certificates-request-manager
+        - certificates-readiness
+        - certificates-revision-manager
+        - certificaterequests-approver
+        - certificaterequests-issuer-vault
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        memory: 512Mi
+    webhook:
+      securePort: 10250
+      resources:
+        requests:
+          cpu: 25m
+          memory: 64Mi
+        limits:
+          memory: 256Mi
+    cainjector:
+      extraArgs:
+        - --namespace=cert-manager
+        - --enable-certificates-data-source=false
+        - --enable-apiservices-injectable=false
+        - --enable-customresourcedefinitions-injectable=false
+      resources:
+        requests:
+          cpu: 25m
+          memory: 64Mi
+        limits:
+          memory: 256Mi
+  # The official chart has cluster-wide controller bindings even in namespace mode.
+  # Keep these patches tied to the pinned chart; review them on every upgrade.
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: ClusterRole
+              name: cert-manager-controller-issuers
+            patch: |-
+              - op: replace
+                path: /kind
+                value: Role
+              - op: add
+                path: /metadata/namespace
+                value: apps-gateway
+          - target:
+              kind: ClusterRoleBinding
+              name: cert-manager-controller-issuers
+            patch: |-
+              - op: replace
+                path: /kind
+                value: RoleBinding
+              - op: add
+                path: /metadata/namespace
+                value: apps-gateway
+              - op: replace
+                path: /roleRef/kind
+                value: Role
+          - target:
+              kind: ClusterRole
+              name: cert-manager-controller-certificates
+            patch: |-
+              - op: replace
+                path: /kind
+                value: Role
+              - op: add
+                path: /metadata/namespace
+                value: apps-gateway
+          - target:
+              kind: ClusterRoleBinding
+              name: cert-manager-controller-certificates
+            patch: |-
+              - op: replace
+                path: /kind
+                value: RoleBinding
+              - op: add
+                path: /metadata/namespace
+                value: apps-gateway
+              - op: replace
+                path: /roleRef/kind
+                value: Role
+          - target:
+              kind: ClusterRole
+              name: cert-manager-controller-clusterissuers
+            patch: |-
+              $patch: delete
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: ClusterRole
+              metadata:
+                name: cert-manager-controller-clusterissuers
+          - target:
+              kind: ClusterRoleBinding
+              name: cert-manager-controller-clusterissuers
+            patch: |-
+              $patch: delete
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: ClusterRoleBinding
+              metadata:
+                name: cert-manager-controller-clusterissuers
+          - target:
+              kind: ClusterRole
+              name: cert-manager-controller-orders
+            patch: |-
+              $patch: delete
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: ClusterRole
+              metadata:
+                name: cert-manager-controller-orders
+          - target:
+              kind: ClusterRoleBinding
+              name: cert-manager-controller-orders
+            patch: |-
+              $patch: delete
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: ClusterRoleBinding
+              metadata:
+                name: cert-manager-controller-orders
+          - target:
+              kind: ClusterRole
+              name: cert-manager-controller-challenges
+            patch: |-
+              $patch: delete
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: ClusterRole
+              metadata:
+                name: cert-manager-controller-challenges
+          - target:
+              kind: ClusterRoleBinding
+              name: cert-manager-controller-challenges
+            patch: |-
+              $patch: delete
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: ClusterRoleBinding
+              metadata:
+                name: cert-manager-controller-challenges
+          - target:
+              kind: ClusterRole
+              name: cert-manager-controller-ingress-shim
+            patch: |-
+              $patch: delete
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: ClusterRole
+              metadata:
+                name: cert-manager-controller-ingress-shim
+          - target:
+              kind: ClusterRoleBinding
+              name: cert-manager-controller-ingress-shim
+            patch: |-
+              $patch: delete
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: ClusterRoleBinding
+              metadata:
+                name: cert-manager-controller-ingress-shim
+          - target:
+              kind: ClusterRole
+              name: cert-manager-controller-certificatesigningrequests
+            patch: |-
+              $patch: delete
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: ClusterRole
+              metadata:
+                name: cert-manager-controller-certificatesigningrequests
+          - target:
+              kind: ClusterRoleBinding
+              name: cert-manager-controller-certificatesigningrequests
+            patch: |-
+              $patch: delete
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: ClusterRoleBinding
+              metadata:
+                name: cert-manager-controller-certificatesigningrequests
+          - target:
+              kind: ClusterRole
+              name: cert-manager-cainjector
+            patch: |-
+              - op: replace
+                path: /rules
+                value:
+                  - apiGroups: [admissionregistration.k8s.io]
+                    resources: [validatingwebhookconfigurations, mutatingwebhookconfigurations]
+                    verbs: [get, list, watch]
+                  - apiGroups: [admissionregistration.k8s.io]
+                    resources: [validatingwebhookconfigurations, mutatingwebhookconfigurations]
+                    resourceNames: [cert-manager-webhook]
+                    verbs: [update, patch]
+          - target:
+              kind: Role
+              name: cert-manager-controller-certificates
+            patch: |-
+              - op: replace
+                path: /rules
+                value:
+                  - apiGroups: [cert-manager.io]
+                    resources: [certificates, issuers]
+                    verbs: [get, list, watch, update, patch]
+                  - apiGroups: [cert-manager.io]
+                    resources: [certificates/status, certificates/finalizers]
+                    verbs: [update, patch]
+                  - apiGroups: [cert-manager.io]
+                    resources: [certificaterequests]
+                    verbs: [get, list, watch, create, update, patch, delete]
+                  - apiGroups: [cert-manager.io]
+                    resources: [certificaterequests/status, certificaterequests/finalizers]
+                    verbs: [update, patch]
+                  - apiGroups: ['']
+                    resources: [secrets]
+                    verbs: [get, list, watch, create, update, patch, delete]
+                  - apiGroups: ['']
+                    resources: [events]
+                    verbs: [create, patch]

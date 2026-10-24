@@ -1,0 +1,17 @@
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: openbao-apps-internal
+  namespace: apps-gateway
+spec:
+  vault:
+    server: https://openbao.openbao.svc:8200
+    path: pki_apps/sign/apps-internal
+    # Public OpenBao bootstrap CA, populated by the private operator workflow.
+    caBundle: ${OPENBAO_TLS_CA_B64}
+    auth:
+      kubernetes:
+        mountPath: /v1/auth/kubernetes-pki
+        role: apps-internal-issuer
+        serviceAccountRef:
+          name: apps-internal-issuer
