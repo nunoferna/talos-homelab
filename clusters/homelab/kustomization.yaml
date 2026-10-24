@@ -9,3 +9,5 @@ resources:
   - ../../platform/gateway-api
   - ../../platform/apps-gateway
   - ../../platform/apps-dns
+  - ../../platform/cert-manager
+  - ../../platform/apps-pki
