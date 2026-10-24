@@ -82,6 +82,17 @@ spec:
     - kustomize:
         patches:
           - target:
+              kind: Role
+              name: cert-manager:leaderelection
+              namespace: cert-manager
+            patch: |-
+              - op: add
+                path: /rules/-
+                value:
+                  apiGroups: ['']
+                  resources: [events]
+                  verbs: [create, patch]
+          - target:
               kind: ClusterRole
               name: cert-manager-controller-issuers
             patch: |-
