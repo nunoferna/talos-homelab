@@ -11,3 +11,4 @@ resources:
   - ../../platform/apps-dns
   - ../../platform/cert-manager
   - ../../platform/apps-pki
+  - ../../platform/cluster-dns
