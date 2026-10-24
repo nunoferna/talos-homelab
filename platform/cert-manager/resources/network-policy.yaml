@@ -51,7 +51,9 @@ spec:
     matchLabels:
       app.kubernetes.io/component: webhook
   ingress:
-    - fromEntities: [kube-apiserver]
+    # Talos API-server traffic can arrive with host/remote-node identities.
+    # Limit node access to the admission listener, not the whole namespace.
+    - fromEntities: [kube-apiserver, host, remote-node]
       toPorts:
         - ports:
             - port: '10250'
