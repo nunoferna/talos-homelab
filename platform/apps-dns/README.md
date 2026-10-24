@@ -13,7 +13,9 @@ Two replicas serve explicit records over LAN TCP/UDP 53, using Cilium IPAM/L2
 with exact Service selectors. Pods bind
 1053 with only `NET_BIND_SERVICE`, required by the official binary's file
 capability even on a high port. No API RBAC or service-account tokens. There is
-no recursive forwarding, Kubernetes plugin, wildcard or AAAA record. Two
+no recursive forwarding, Kubernetes plugin, wildcard or AAAA record. Explicit
+records for `keycloak.apps.internal` and `kagent.apps.internal` point to the
+shared gateway. DNS resolution does not activate HTTPS or expose either app. Two
 replicas do not survive cluster loss.
 
 The Service uses `loadBalancerSourceRanges` from the private LAN CIDR: Cilium

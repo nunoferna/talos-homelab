@@ -114,3 +114,4 @@ spec:
           apps.internal. 30 IN NS ns.apps.internal.
           ns.apps.internal. 30 IN A ${APPS_DNS_IPV4}
           keycloak.apps.internal. 30 IN A ${APPS_GATEWAY_IPV4}
+          kagent.apps.internal. 30 IN A ${APPS_GATEWAY_IPV4}
