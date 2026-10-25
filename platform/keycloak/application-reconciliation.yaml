@@ -1,0 +1,73 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: keycloak-realm-bootstrap
+  namespace: flux-system
+spec:
+  suspend: true
+  interval: 10m
+  retryInterval: 1m
+  timeout: 10m
+  path: ./platform/keycloak/bootstrap
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  dependsOn:
+    - name: keycloak
+    - name: keycloak-automation-inputs
+    - name: keycloak-inputs
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: keycloak-site
+        optional: false
+  prune: false
+  deletionPolicy: Orphan
+  force: false
+  healthChecks:
+    - apiVersion: k8s.keycloak.org/v2beta1
+      kind: KeycloakRealmImport
+      name: homelab-bootstrap
+      namespace: keycloak
+  healthCheckExprs:
+    - apiVersion: k8s.keycloak.org/v2beta1
+      kind: KeycloakRealmImport
+      failed: >-
+        has(status.conditions) && status.conditions.exists(c, c.type == 'HasErrors' && c.status == 'True')
+      current: >-
+        has(status.conditions) && status.conditions.exists(c, c.type == 'Done' && c.status == 'True') &&
+        !status.conditions.exists(c, c.type == 'HasErrors' && c.status == 'True')
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: keycloak-realm-config
+  namespace: flux-system
+spec:
+  suspend: true
+  interval: 5m
+  retryInterval: 1m
+  timeout: 10m  # Includes the first five-minute schedule and bounded Job runtime.
+  path: ./platform/keycloak/configuration
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  dependsOn:
+    - name: keycloak-realm-bootstrap
+    - name: apps-pki
+    - name: keycloak-inputs
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: keycloak-site
+        optional: false
+  # This directory owns only the config runner and its public configuration.
+  prune: true
+  force: false
+  wait: true
+  healthCheckExprs:
+    - apiVersion: batch/v1
+      kind: CronJob
+      current: >-
+        has(status) && has(status.lastSuccessfulTime) &&
+        (!has(spec.suspend) || !spec.suspend)

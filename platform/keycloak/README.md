@@ -24,13 +24,31 @@ restricted pod security; it must be checked when upgrading the operator.
 
 The permanent master administrator uses verified passkey-only browser login;
 the temporary user and master password grants have been retired. Application
-identities belong to the separate `homelab` realm. Reviewed private automation
-uses a public CLI client with browser login and PKCE, preserving that boundary.
-OpenBao OIDC uses a separate confidential client and a group-bound role; ESO
-continues to use Kubernetes authentication. Removing Flux objects does not
-delete persistence.
+identity is prepared as a separate `homelab` realm: Flux delivers an official
+create-only RealmImport, then a config-cli CronJob reconciles declared clients,
+groups and flows every five minutes. It uses a realm-scoped service account,
+verified HTTPS, no Kubernetes API token, no deletion of managed resources and
+no import cache. Human credentials and enrollment actions are not reapplied.
+
+The single automation credential is a private SOPS bootstrap exception,
+independent of OpenBao/ESO. The operator import inherits the server's restricted
+pod template and verified database TLS; policy grants only its database and DNS
+access. The config runner can reach only DNS and the Keycloak gateway/backend.
+The committed CA is public trust material, without a signing key.
+Ongoing desired configuration is [realm.json](configuration/realm.json).
+
+All three new reconciliations remain suspended pending separate activation.
+Config-cli 6.5.1, built for Keycloak 26.5.5, is an accepted compatibility exception
+with server 26.8.1 for this PoC. Its image is digest-pinned. Use Git to change
+the application browser flow after passkey enrollment; no manual JSON import
+or master CLI client is required. Initial OpenBao OIDC bootstrap stays an
+approved out-of-cluster operation, keeping its root token outside Kubernetes.
+ESO continues to use Kubernetes authentication. Removing Flux objects does
+not delete realm/database persistence.
 
 Sources: [operator installation](https://www.keycloak.org/operator/installation),
 [Keycloak configuration](https://www.keycloak.org/operator/advanced-configuration),
 [database TLS](https://www.keycloak.org/server/db),
-[CNPG configuration](https://cloudnative-pg.io/documentation/1.30/operator_conf/).
+[CNPG configuration](https://cloudnative-pg.io/documentation/1.30/operator_conf/),
+[realm import](https://www.keycloak.org/operator/realm-import),
+[config-cli](https://github.com/adorsys/keycloak-config-cli/tree/v6.5.1).

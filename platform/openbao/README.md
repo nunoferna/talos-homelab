@@ -38,8 +38,10 @@ CNPG Ready, retained PVC/PV binding, verified TLS and native `bao status`.
 OIDC access adds gateway ingress on 8200 and gateway egress on 443, plus the
 Keycloak backend identity on 8080 for Cilium's pod-origin Gateway policy checks;
 the provider's public CA is configured on the OIDC auth mount, without restarting
-OpenBao. Its configuration and Keycloak client are reviewed private operator
-code, with generated client credentials kept out of Git and Kubernetes Secrets.
+OpenBao. Flux owns the Keycloak client; the initial OpenBao auth configuration
+uses reviewed private operator code. OpenBao's generated client secret stays
+in the two services and protected operator memory, outside Git and Kubernetes
+Secrets. The separate realm-automation seed is the documented SOPS exception.
 The next phase is [bounded ESO integration](../external-secrets/README.md);
 it is not enabled by this module.
 
