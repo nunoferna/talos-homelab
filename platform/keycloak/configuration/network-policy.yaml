@@ -1,0 +1,34 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: keycloak-config
+  namespace: keycloak
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: keycloak-config
+  egress:
+    - toEntities: [ingress]
+      toPorts:
+        - ports:
+            - port: '443'
+              protocol: TCP
+    # Cilium also evaluates pod-origin Gateway requests at the actual backend.
+    - toEndpoints:
+        - matchLabels:
+            app: keycloak
+            app.kubernetes.io/instance: keycloak
+      toPorts:
+        - ports:
+            - port: '8080'
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s:k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: '53'
+              protocol: UDP
+            - port: '53'
+              protocol: TCP

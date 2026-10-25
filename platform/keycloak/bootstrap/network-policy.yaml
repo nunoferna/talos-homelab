@@ -1,0 +1,47 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: keycloak-realm-import
+  namespace: keycloak
+spec:
+  endpointSelector:
+    matchLabels:
+      app: keycloak-realm-import
+      app.kubernetes.io/instance: keycloak
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            cnpg.io/cluster: keycloak-db
+      toPorts:
+        - ports:
+            - port: '5432'
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s:k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: '53'
+              protocol: UDP
+            - port: '53'
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: keycloak-realm-import-database
+  namespace: keycloak
+spec:
+  endpointSelector:
+    matchLabels:
+      cnpg.io/cluster: keycloak-db
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app: keycloak-realm-import
+            app.kubernetes.io/instance: keycloak
+      toPorts:
+        - ports:
+            - port: '5432'
+              protocol: TCP

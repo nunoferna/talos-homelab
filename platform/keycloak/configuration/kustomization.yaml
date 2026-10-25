@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - cronjob.yaml
+  - network-policy.yaml
+configMapGenerator:
+  - name: keycloak-realm-config
+    namespace: keycloak
+    files:
+      - realm.json
+  - name: keycloak-config-ca
+    namespace: keycloak
+    files:
+      - ca.crt=ca.crt

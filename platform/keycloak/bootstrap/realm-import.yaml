@@ -1,0 +1,73 @@
+apiVersion: k8s.keycloak.org/v2beta1
+kind: KeycloakRealmImport
+metadata:
+  name: homelab-bootstrap
+  namespace: keycloak
+spec:
+  keycloakCRName: keycloak
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: '1'
+      memory: 2Gi
+  placeholders:
+    HOMELAB_CONFIG_SECRET:
+      secret:
+        name: keycloak-config
+        key: client-secret
+  # Create-only bootstrap. Existing realms are never overwritten by the operator.
+  realm:
+    id: homelab
+    realm: homelab
+    displayName: Homelab applications
+    enabled: true
+    sslRequired: all
+    registrationAllowed: false
+    resetPasswordAllowed: false
+    rememberMe: false
+    bruteForceProtected: true
+    webAuthnPolicyPasswordlessRpId: keycloak.apps.internal
+    webAuthnPolicyPasswordlessRpEntityName: Homelab applications
+    webAuthnPolicyPasswordlessUserVerificationRequirement: required
+    webAuthnPolicyPasswordlessResidentKey: required
+    webAuthnPolicyPasswordlessPasskeysEnabled: true
+    groups:
+      - name: bao-operators
+    clients:
+      - clientId: homelab-config
+        name: Homelab realm configuration
+        protocol: openid-connect
+        enabled: true
+        publicClient: false
+        clientAuthenticatorType: client-secret
+        # Flux emits the literal placeholder; Keycloak resolves the Secret env.
+        secret: '$${HOMELAB_CONFIG_SECRET}'
+        standardFlowEnabled: false
+        directAccessGrantsEnabled: false
+        implicitFlowEnabled: false
+        serviceAccountsEnabled: true
+        fullScopeAllowed: true
+        defaultClientScopes: [roles]
+        optionalClientScopes: []
+        attributes:
+          access.token.lifespan: '120'
+      - clientId: admin-cli
+        protocol: openid-connect
+        enabled: false
+        publicClient: true
+        standardFlowEnabled: false
+        directAccessGrantsEnabled: false
+        implicitFlowEnabled: false
+        serviceAccountsEnabled: false
+    users:
+      - username: service-account-homelab-config
+        enabled: true
+        serviceAccountClientId: homelab-config
+        clientRoles:
+          realm-management: [realm-admin]
+      - username: '${KEYCLOAK_APPLICATION_USER}'
+        enabled: true
+        requiredActions: [webauthn-register-passwordless]
+        groups: [/bao-operators]

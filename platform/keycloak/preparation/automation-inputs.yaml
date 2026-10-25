@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: keycloak-automation-inputs-reconciler
+  namespace: flux-system
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: keycloak-automation-inputs-reconciler
+  namespace: keycloak
+rules:
+  # Kubernetes cannot restrict create by resourceName; updates are exact-name.
+  - apiGroups: ['']
+    resources: [secrets]
+    verbs: [create]
+  - apiGroups: ['']
+    resources: [secrets]
+    resourceNames: [keycloak-config]
+    verbs: [get, patch, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: keycloak-automation-inputs-reconciler
+  namespace: keycloak
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: keycloak-automation-inputs-reconciler
+subjects:
+  - kind: ServiceAccount
+    name: keycloak-automation-inputs-reconciler
+    namespace: flux-system
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: keycloak-automation-inputs
+  namespace: flux-system
+spec:
+  suspend: true  # Activation follows review of the seed and bootstrap manifests.
+  interval: 1m
+  path: ./clusters/homelab/keycloak/automation
+  sourceRef:
+    kind: GitRepository
+    name: homelab-private
+  serviceAccountName: keycloak-automation-inputs-reconciler
+  decryption:
+    provider: sops
+    secretRef:
+      name: sops-age
+  prune: false
+  deletionPolicy: Orphan
+  force: false
