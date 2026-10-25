@@ -29,6 +29,27 @@ spec:
     crds: CreateReplace
   upgrade:
     crds: CreateReplace
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              group: apps
+              version: v1
+              kind: Deployment
+              name: cnpg
+            patch: |
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: cnpg
+              spec:
+                template:
+                  spec:
+                    containers:
+                      - name: manager
+                        env:
+                          - name: WATCH_NAMESPACE
+                            value: openbao,keycloak
   values:
     fullnameOverride: cnpg
     config:

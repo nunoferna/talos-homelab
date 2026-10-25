@@ -1,0 +1,36 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: keycloak-postgresql-local
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Retain
+allowVolumeExpansion: false
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: keycloak-postgresql-data
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  capacity:
+    storage: 4Gi  # Scheduling declaration, not a directory quota.
+  volumeMode: Filesystem
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: keycloak-postgresql-local
+  claimRef:
+    namespace: keycloak
+    name: keycloak-db-1
+  local:
+    path: /var/mnt/keycloak-poc
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values: ['${KEYCLOAK_DB_NODE}']

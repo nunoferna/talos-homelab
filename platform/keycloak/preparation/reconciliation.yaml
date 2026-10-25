@@ -1,0 +1,92 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: keycloak-database
+  namespace: flux-system
+spec:
+  suspend: true  # Activate only after reviewed cp02 mount delivery.
+  interval: 10m
+  retryInterval: 30s
+  timeout: 10m
+  path: ./platform/keycloak/database
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  dependsOn:
+    - name: keycloak-prerequisites
+    - name: keycloak-inputs
+    - name: openbao
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: keycloak-site
+        optional: false
+  prune: false
+  deletionPolicy: Orphan
+  force: false
+  healthChecks:
+    - apiVersion: helm.toolkit.fluxcd.io/v2
+      kind: HelmRelease
+      name: keycloak-db
+      namespace: keycloak
+    - apiVersion: postgresql.cnpg.io/v1
+      kind: Cluster
+      name: keycloak-db
+      namespace: keycloak
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      name: keycloak-db-1
+      namespace: keycloak
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: keycloak
+  namespace: flux-system
+spec:
+  suspend: true  # Activate after database readiness and host verification.
+  interval: 10m
+  retryInterval: 30s
+  timeout: 10m
+  path: ./platform/keycloak/resources
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  dependsOn:
+    - name: keycloak-database
+    - name: keycloak-inputs
+    - name: keycloak-operator
+    - name: apps-gateway
+    - name: cluster-dns
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: keycloak-site
+        optional: false
+  prune: false
+  deletionPolicy: Orphan
+  force: false
+  healthChecks:
+    - apiVersion: k8s.keycloak.org/v2beta1
+      kind: Keycloak
+      name: keycloak
+      namespace: keycloak
+    - apiVersion: gateway.networking.k8s.io/v1
+      kind: HTTPRoute
+      name: keycloak
+      namespace: keycloak
+  healthCheckExprs:
+    - apiVersion: k8s.keycloak.org/v2beta1
+      kind: Keycloak
+      current: >-
+        has(status.conditions) &&
+        status.conditions.exists(c, c.type == 'Ready' && c.status == 'True' &&
+          has(c.observedGeneration) && c.observedGeneration == metadata.generation)
+    - apiVersion: gateway.networking.k8s.io/v1
+      kind: HTTPRoute
+      current: >-
+        has(status.parents) && status.parents.size() > 0 &&
+        status.parents.all(p, has(p.conditions) &&
+          ['Accepted', 'ResolvedRefs'].all(t,
+            p.conditions.exists(c, c.type == t && c.status == 'True' &&
+              c.observedGeneration == metadata.generation)))

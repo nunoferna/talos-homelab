@@ -12,3 +12,4 @@ resources:
   - ../../platform/cert-manager
   - ../../platform/apps-pki
   - ../../platform/cluster-dns
+  - ../../platform/keycloak

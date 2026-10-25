@@ -1,3 +1,19 @@
+variable "keycloak_local_storage_node" {
+  description = "Opt in one separate inventory node to the Keycloak PostgreSQL bind mount on its existing filesystem. Talos 1.14.1 rendering only; empty disables it."
+  type        = string
+  default     = ""
+  nullable    = false
+
+  validation {
+    condition = var.keycloak_local_storage_node == "" || (
+      contains(keys(yamldecode(file(var.inventory_file)).homelab.nodes), var.keycloak_local_storage_node) &&
+      var.keycloak_local_storage_node != var.openbao_local_storage_node &&
+      yamldecode(file(var.inventory_file)).homelab.talos.version == "v1.14.1"
+    )
+    error_message = "Choose an inventory node distinct from OpenBao on Talos v1.14.1, or leave empty."
+  }
+}
+
 variable "openbao_local_storage_node" {
   description = "Opt in one inventory node to the OpenBao-only local bind mount and Talos 1.14.1 legacy kubelet schema. Empty disables it. Rendering only."
   type        = string

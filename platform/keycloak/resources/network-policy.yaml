@@ -1,0 +1,40 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: keycloak
+  namespace: keycloak
+spec:
+  endpointSelector:
+    matchLabels:
+      app: keycloak
+      app.kubernetes.io/instance: keycloak
+  ingress:
+    # Envoy's Cilium ingress identity is the only trusted HTTP proxy.
+    - fromEntities: [ingress]
+      toPorts:
+        - ports:
+            - port: '8080'
+              protocol: TCP
+    - fromEntities: [host, remote-node]
+      toPorts:
+        - ports:
+            - port: '9000'
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            cnpg.io/cluster: keycloak-db
+      toPorts:
+        - ports:
+            - port: '5432'
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s:k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: '53'
+              protocol: UDP
+            - port: '53'
+              protocol: TCP

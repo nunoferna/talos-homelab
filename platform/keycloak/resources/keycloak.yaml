@@ -1,0 +1,76 @@
+apiVersion: k8s.keycloak.org/v2beta1
+kind: Keycloak
+metadata:
+  name: keycloak
+  namespace: keycloak
+spec:
+  instances: 1
+  image: >-
+    quay.io/keycloak/keycloak:26.8.1@sha256:a78d6b79572168cb25886b80a8b5b8d4ed4390743e3eecb810538683e209dd6b
+  # A digest in spec.image is treated as custom; upstream is not pre-augmented.
+  startOptimized: false
+  automountServiceAccountToken: false
+  db:
+    vendor: postgres
+    host: keycloak-db-rw.keycloak.svc.cluster.local
+    database: keycloak
+    usernameSecret:
+      name: keycloak-db-app
+      key: username
+    passwordSecret:
+      name: keycloak-db-app
+      key: password
+    poolInitialSize: 1
+    poolMinSize: 1
+    poolMaxSize: 10
+  http:
+    httpEnabled: true
+  hostname:
+    hostname: 'https://${KEYCLOAK_HOSTNAME}'
+    strict: true
+  proxy:
+    headers: xforwarded
+  ingress:
+    enabled: false
+  networkPolicy:
+    enabled: false  # Cilium owns ingress and egress; no additive broad allow.
+  additionalOptions:
+    - name: db-tls-mode
+      value: verify-server
+    - name: db-tls-trust-store-file
+      value: /opt/keycloak/conf/database-ca/ca.crt
+    - name: http-management-scheme
+      value: http
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1700Mi
+    limits:
+      cpu: '2'
+      memory: 2Gi
+  # The operator has no first-class projection for a single Secret key. Project
+  # only the database CA certificate, never the CNPG CA signing key.
+  unsupported:
+    podTemplate:
+      spec:
+        securityContext:
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        containers:
+          - name: keycloak
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop: [ALL]
+            volumeMounts:
+              - name: database-ca
+                mountPath: /opt/keycloak/conf/database-ca
+                readOnly: true
+        volumes:
+          - name: database-ca
+            secret:
+              secretName: keycloak-db-ca
+              items:
+                - key: ca.crt
+                  path: ca.crt
