@@ -91,9 +91,16 @@
       "builtIn": false,
       "authenticationExecutions": [
         {
-          "authenticator": "webauthn-authenticator-passwordless",
-          "requirement": "REQUIRED",
+          "authenticator": "auth-cookie",
+          "requirement": "ALTERNATIVE",
           "priority": 10,
+          "authenticatorFlow": false,
+          "userSetupAllowed": false
+        },
+        {
+          "authenticator": "webauthn-authenticator-passwordless",
+          "requirement": "ALTERNATIVE",
+          "priority": 20,
           "authenticatorFlow": false,
           "userSetupAllowed": false
         }
