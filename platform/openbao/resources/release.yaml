@@ -56,7 +56,7 @@ spec:
       standalone:
         enabled: true
         config: |
-          ui = false
+          ui = true
           disable_mlock = true
           unsafe_allow_api_audit_creation = false
           api_addr = "https://openbao.openbao.svc:8200"

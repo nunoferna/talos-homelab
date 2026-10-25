@@ -39,7 +39,8 @@
       "serviceAccountsEnabled": false,
       "fullScopeAllowed": false,
       "redirectUris": [
-        "http://localhost:8250/oidc/callback"
+        "http://localhost:8250/oidc/callback",
+        "https://openbao.apps.internal/ui/vault/auth/oidc/oidc/callback"
       ],
       "webOrigins": [],
       "attributes": {
