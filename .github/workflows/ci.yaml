@@ -99,7 +99,7 @@ jobs:
           curl --fail --silent --show-error --location \
             "$ESO_RELEASE_URL/external-secrets-2.13.0.tgz" \
             --output "$ESO_CHECK_DIR/external-secrets.tgz"
-      - name: Verify the empty namespace-scoped ESO chart on Kubernetes 1.37
+      - name: Verify the namespace-scoped ESO chart on Kubernetes 1.37
         env:
           ESO_CHART_ARCHIVE: ${{ runner.temp }}/eso-offline-check/external-secrets.tgz
         run: python tests/external_secrets.py

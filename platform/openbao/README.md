@@ -16,7 +16,8 @@ digest-pinned). Helm dependencies order operator → database → OpenBao.
   custody and operator commands stay outside public Git and Kubernetes.
 - Cilium isolates the server, database and operator. The LAN API hostname is
   `openbao.apps.internal`; the shared gateway verifies backend TLS against the
-  public bootstrap CA and service DNS name. OpenBao's UI remains disabled.
+  public bootstrap CA and service DNS name. The UI is enabled in the staged
+  configuration and becomes active after the approved restart and unseal.
 
 ## Operations
 
@@ -42,8 +43,9 @@ OpenBao. Flux owns the Keycloak client; the initial OpenBao auth configuration
 uses reviewed private operator code. OpenBao's generated client secret stays
 in the two services and protected operator memory, outside Git and Kubernetes
 Secrets. The separate realm-automation seed is the documented SOPS exception.
-The next phase is [bounded ESO integration](../external-secrets/README.md);
-it is not enabled by this module.
+The human role allows both the CLI callback and the exact HTTPS UI callback.
+[Bounded ESO integration](../external-secrets/README.md) uses separate Kubernetes
+authentication and a read-only policy for the `kagent` namespace.
 
 ## Limits
 

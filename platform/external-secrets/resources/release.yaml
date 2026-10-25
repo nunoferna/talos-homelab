@@ -25,7 +25,7 @@ spec:
     revisionHistoryLimit: 2
     installCRDs: true
     scopedRBAC: true
-    scopedNamespace: external-secrets
+    scopedNamespace: kagent
     processClusterStore: false
     processClusterExternalSecret: false
     processClusterPushSecret: false
@@ -54,7 +54,6 @@ spec:
       enabled: false
     bitwarden-sdk-server:
       enabled: false
-    # Empty controller-only PoC, not the configuration for real secret stores.
     # Avoid the upstream certificate controller's cluster-wide Secret reads.
     webhook:
       create: false

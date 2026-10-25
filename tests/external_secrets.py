@@ -1,4 +1,4 @@
-"""Offline checks for the empty ESO PoC; no credentials or cluster calls."""
+"""Offline checks for the namespace-scoped ESO controller; no credentials or cluster calls."""
 
 import hashlib
 import os
@@ -11,6 +11,7 @@ import yaml
 
 CHART_SHA256 = "f693a96f0d929a07e000dd39e68b92a1a1343c5bc440ebab091b03da30bcac3a"
 NAMESPACE = "external-secrets"
+TARGET_NAMESPACE = "kagent"
 FORBIDDEN = {
     "Secret", "SecretStore", "ClusterSecretStore", "ExternalSecret",
     "ClusterExternalSecret", "PushSecret", "ClusterPushSecret",
@@ -81,7 +82,7 @@ class ExternalSecretsTests(unittest.TestCase):
             self.assertNotIn(doc["kind"], FORBIDDEN)
             namespace = doc.get("metadata", {}).get("namespace")
             if namespace:
-                self.assertEqual(namespace, NAMESPACE)
+                self.assertIn(namespace, {NAMESPACE, TARGET_NAMESPACE})
 
     def test_namespace_and_crds_survive_controller_rollback(self):
         namespace = next(doc for doc in self.desired if doc["kind"] == "Namespace")
@@ -105,7 +106,8 @@ class ExternalSecretsTests(unittest.TestCase):
         roles = [doc for doc in self.chart if doc["kind"] == "Role"]
         self.assertTrue(roles)
         for role in roles:
-            self.assertEqual(role["metadata"]["namespace"], NAMESPACE)
+            expected_namespace = NAMESPACE if role["metadata"]["name"].endswith("-leaderelection") else TARGET_NAMESPACE
+            self.assertEqual(role["metadata"]["namespace"], expected_namespace)
             self.assertNotIn("aggregationRule", role)
             for rule in role["rules"]:
                 self.assertNotIn("*", rule["verbs"])
@@ -116,7 +118,8 @@ class ExternalSecretsTests(unittest.TestCase):
         bindings = [doc for doc in self.chart if doc["kind"] == "RoleBinding"]
         self.assertTrue(bindings)
         for binding in bindings:
-            self.assertEqual(binding["metadata"]["namespace"], NAMESPACE)
+            expected_namespace = NAMESPACE if binding["metadata"]["name"].endswith("-leaderelection") else TARGET_NAMESPACE
+            self.assertEqual(binding["metadata"]["namespace"], expected_namespace)
             self.assertEqual(binding["roleRef"]["kind"], "Role")
             self.assertTrue(all(subject.get("namespace") == NAMESPACE
                                 for subject in binding["subjects"]))
@@ -134,7 +137,7 @@ class ExternalSecretsTests(unittest.TestCase):
         container = pod["containers"][0]
         self.assertEqual(container["image"], "ghcr.io/external-secrets/external-secrets:v2.13.0")
         args = container["args"]
-        self.assertIn("--namespace=external-secrets", args)
+        self.assertIn("--namespace=kagent", args)
         for flag in ("cluster-store", "cluster-external-secret", "cluster-push-secret", "push-secret"):
             self.assertIn(f"--enable-{flag}-reconciler=false", args)
         self.assertNotIn("--unsafe-allow-generic-targets=true", args)
@@ -150,7 +153,7 @@ class ExternalSecretsTests(unittest.TestCase):
         self.assertEqual(container["resources"], self.release["spec"]["values"]["resources"])
         self.assertNotIn("Service", {doc["kind"] for doc in self.chart})
 
-    def test_network_allows_only_dns_api_and_node_health(self):
+    def test_network_allows_only_dns_api_openbao_and_node_health(self):
         policy = next(doc for doc in self.desired if doc["kind"] == "CiliumNetworkPolicy")
         self.assertEqual(policy["metadata"]["namespace"], NAMESPACE)
         self.assertEqual(policy["spec"]["endpointSelector"], {})
@@ -170,6 +173,12 @@ class ExternalSecretsTests(unittest.TestCase):
             "toPorts": [{"ports": [
                 {"port": "443", "protocol": "TCP"}, {"port": "6443", "protocol": "TCP"},
             ]}],
+        }, {
+            "toEndpoints": [{"matchLabels": {
+                "k8s:io.kubernetes.pod.namespace": "openbao",
+                "app.kubernetes.io/name": "openbao", "component": "server",
+            }}],
+            "toPorts": [{"ports": [{"port": "8200", "protocol": "TCP"}]}],
         }])
 
 
