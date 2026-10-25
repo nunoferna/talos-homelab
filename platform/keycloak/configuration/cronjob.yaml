@@ -91,7 +91,8 @@ spec:
                   valueFrom:
                     secretKeyRef:
                       name: keycloak-config
-                      key: client-secret
+                      # The pinned Java client does not form-encode Basic credentials.
+                      key: client-secret-basic
                 - name: KEYCLOAK_SKIPSERVERINFO
                   value: 'true'  # Own-realm administration needs no master access.
                 - name: KEYCLOAK_SSLVERIFY
