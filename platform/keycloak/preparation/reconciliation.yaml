@@ -4,7 +4,7 @@ metadata:
   name: keycloak-database
   namespace: flux-system
 spec:
-  suspend: true  # Activate only after reviewed cp02 mount delivery.
+  suspend: false  # Reviewed cp02 host mount delivered and verified.
   interval: 10m
   retryInterval: 30s
   timeout: 10m
