@@ -17,8 +17,9 @@ ranges remain unchanged; Cilium's `bpf-lb-external-clusterip=false` keeps
 ClusterIPs internal. That setting is a prerequisite for this configuration.
 
 Merge the private ClusterIP input first. The scoped Flux service account manages
-only the CoreDNS ConfigMap and reads Deployment health. Pruning, deletion and
-forced replacement are disabled. After merge verify both application names,
+only the CoreDNS ConfigMap and reads Deployment health through a CEL check of
+its observed generation and replica counts; it cannot list ReplicaSets or pods.
+Pruning, deletion and forced replacement are disabled. After merge verify both application names,
 `kubernetes.default.svc.cluster.local` and an external name from existing pods;
 inspect CoreDNS reload logs and confirm the Service/Deployment UIDs are unchanged.
 
