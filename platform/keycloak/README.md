@@ -22,12 +22,13 @@ PostgreSQL requires TLS with server verification. The bounded `unsupported`
 pod-template override projects only `ca.crt` from CNPG's CA Secret and sets
 restricted pod security; it must be checked when upgrading the operator.
 
-After activation: verify Keycloak readiness, route conditions, HTTPS and OIDC
-discovery from the Mac. Establish a permanent administrator with
-MFA and remove the temporary bootstrap account before configuring application
-clients. OpenBao OIDC follows enrollment and adds the required gateway egress
-and CA trust; ESO keeps using Kubernetes authentication. Removing Flux objects
-does not delete persistence.
+The permanent master administrator uses verified passkey-only browser login;
+the temporary user and master password grants have been retired. Application
+identities belong to the separate `homelab` realm. Reviewed private automation
+uses a public CLI client with browser login and PKCE, preserving that boundary.
+OpenBao OIDC uses a separate confidential client and a group-bound role; ESO
+continues to use Kubernetes authentication. Removing Flux objects does not
+delete persistence.
 
 Sources: [operator installation](https://www.keycloak.org/operator/installation),
 [Keycloak configuration](https://www.keycloak.org/operator/advanced-configuration),

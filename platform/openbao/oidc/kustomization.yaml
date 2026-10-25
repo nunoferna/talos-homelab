@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - route.yaml
+  - network-policy.yaml
+  - backend-tls.yaml
+configMapGenerator:
+  - name: openbao-backend-ca
+    namespace: openbao
+    files:
+      - ca.crt=openbao-ca.crt
+generatorOptions:
+  disableNameSuffixHash: true
