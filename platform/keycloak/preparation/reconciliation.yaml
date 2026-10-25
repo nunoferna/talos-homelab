@@ -44,7 +44,7 @@ metadata:
   name: keycloak
   namespace: flux-system
 spec:
-  suspend: true  # Activate after database readiness and host verification.
+  suspend: false  # Database/PVC and reviewed host mount are verified Ready.
   interval: 10m
   retryInterval: 30s
   timeout: 10m

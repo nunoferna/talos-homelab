@@ -12,10 +12,9 @@ Retain PV, credentials and `/var/mnt/keycloak-poc` directory. This is disposable
 single-node storage on the existing filesystem: no HA, disk quota or backup.
 The existing accepted CNPG/Kubernetes 1.37 PoC exception still applies.
 
-The reviewed host mount is delivered. `keycloak-database` now reconciles the
-separate PostgreSQL instance; `keycloak` remains suspended. Verify database/PVC
-readiness before activating the server in Git. Do not replay completed mount
-plans or delivery workflows.
+The reviewed host mount and separate PostgreSQL instance are Ready. `keycloak`
+now reconciles the server and HTTPS route. Do not replay completed mount plans
+or delivery workflows.
 
 The prepared HTTPRoute uses the existing gateway HTTPS listener. The internal
 HTTP backend accepts only Cilium's ingress identity; management stays internal.
@@ -23,11 +22,12 @@ PostgreSQL requires TLS with server verification. The bounded `unsupported`
 pod-template override projects only `ca.crt` from CNPG's CA Secret and sets
 restricted pod security; it must be checked when upgrading the operator.
 
-After activation: verify database/Keycloak readiness, route conditions, HTTPS
-and OIDC discovery from Mac and OpenBao. Establish a permanent administrator with
+After activation: verify Keycloak readiness, route conditions, HTTPS and OIDC
+discovery from the Mac. Establish a permanent administrator with
 MFA and remove the temporary bootstrap account before configuring application
-clients. Human enrollment and OpenBao OIDC remain a later step; ESO keeps using
-Kubernetes authentication. Removing Flux objects does not delete persistence.
+clients. OpenBao OIDC follows enrollment and adds the required gateway egress
+and CA trust; ESO keeps using Kubernetes authentication. Removing Flux objects
+does not delete persistence.
 
 Sources: [operator installation](https://www.keycloak.org/operator/installation),
 [Keycloak configuration](https://www.keycloak.org/operator/advanced-configuration),
