@@ -4,7 +4,7 @@ metadata:
   name: keycloak-realm-bootstrap
   namespace: flux-system
 spec:
-  suspend: true
+  suspend: false
   interval: 10m
   retryInterval: 1m
   timeout: 10m
@@ -44,7 +44,7 @@ metadata:
   name: keycloak-realm-config
   namespace: flux-system
 spec:
-  suspend: true
+  suspend: false
   interval: 5m
   retryInterval: 1m
   timeout: 10m  # Includes the first five-minute schedule and bounded Job runtime.
@@ -69,5 +69,5 @@ spec:
     - apiVersion: batch/v1
       kind: CronJob
       current: >-
-        has(status) && has(status.lastSuccessfulTime) &&
+        has(status.lastSuccessfulTime) && status.lastSuccessfulTime != null &&
         (!has(spec.suspend) || !spec.suspend)

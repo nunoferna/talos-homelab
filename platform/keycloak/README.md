@@ -37,7 +37,10 @@ access. The config runner can reach only DNS and the Keycloak gateway/backend.
 The committed CA is public trust material, without a signing key.
 Ongoing desired configuration is [realm.json](configuration/realm.json).
 
-All three new reconciliations remain suspended pending separate activation.
+The three application reconciliations deliver the seed, create-only realm
+import and periodic configuration in dependency order. The application browser
+flow stays in enrollment mode until a reviewed private Git change enables
+passkey-only login after successful enrollment.
 Config-cli 6.5.1, built for Keycloak 26.5.5, is an accepted compatibility exception
 with server 26.8.1 for this PoC. Its image is digest-pinned. Use Git to change
 the application browser flow after passkey enrollment; no manual JSON import
