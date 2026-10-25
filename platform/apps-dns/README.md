@@ -5,9 +5,9 @@ Separate CoreDNS for `apps.internal`, using the [official Helm chart](https://gi
 
 Flux enables `apps-dns-inputs` before `apps-dns` using an explicit dependency.
 The ConfigMap-only private-input identity supplies the reserved LAN address,
-interface, client CIDR, SOA serial and HTTPS gateway address. The public workload
+interface, client CIDR, allocated ClusterIP, SOA serial and HTTPS gateway address. The public workload
 then deploys DNS and advertises its reserved address. There is no dependency on
-the suspended TLS gateway inputs.
+the TLS gateway inputs.
 
 Two replicas serve explicit records over LAN TCP/UDP 53, using Cilium IPAM/L2
 with exact Service selectors. Pods bind
@@ -19,9 +19,10 @@ shared gateway. DNS resolution does not activate HTTPS or expose either app. Two
 replicas do not survive cluster loss.
 
 The Service uses `loadBalancerSourceRanges` from the private LAN CIDR: Cilium
-checks external source addresses at the VIP before SNAT. The explicit
-`service.cilium.io/type: LoadBalancer` annotation avoids an alternate ClusterIP
-frontend; NodePorts remain disabled. No cluster-wide routing change is needed.
+checks external source addresses at the VIP before SNAT. NodePorts remain disabled.
+The existing ClusterIP is pinned for suffix-only forwarding from cluster CoreDNS.
+Its ingress requires the kube-system CoreDNS labels and service account on TCP/UDP
+1053; Cilium's `bpf-lb-external-clusterip=false` must remain in force.
 
 Behind that guard, pod ingress accepts the VXLAN `world` identity only on DNS
 TCP/UDP 1053, never probe ports. Node DNS/probe access stays separate. An explicit
@@ -38,8 +39,8 @@ WAN protections remain required. This is not original-client identity at the pod
 The Mac Ansible resolver defaults to read-only preview; explicit enable checks
 TCP/UDP answers before changing only `/etc/resolver/apps.internal`. The private
 apps-DNS runbook contains operator commands. Router/default DNS and the Pi stay
-unchanged. Pods cannot resolve this zone until a separately approved cluster
-CoreDNS ownership handoff adds suffix-only forwarding; Keycloak/OIDC is not ready.
+unchanged. [Cluster DNS configuration](../cluster-dns/README.md) adds suffix-only
+forwarding while retaining the existing Talos-bootstrapped DNS workloads.
 
 Change records through reviewed Git commits and bump the private SOA serial.
 Rollback clients first, then withdraw DNS resources through Git. Suspending Flux

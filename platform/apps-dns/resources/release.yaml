@@ -49,13 +49,14 @@ spec:
     serviceType: LoadBalancer
     service:
       name: apps-dns
+      clusterIP: '${APPS_DNS_CLUSTER_IPV4}'
       loadBalancerClass: io.cilium/l2-announcer
       externalTrafficPolicy: Cluster
       ipFamilyPolicy: SingleStack
       annotations:
         lbipam.cilium.io/ips: '${APPS_DNS_IPV4}'
-        # Do not install an alternate ClusterIP frontend outside the VIP guard.
-        service.cilium.io/type: LoadBalancer
+        # The internal frontend is protected by CoreDNS-only pod ingress.
+        # Cilium external ClusterIP access must remain disabled.
         service.cilium.io/src-ranges-policy: allow
     rollingUpdate:
       maxUnavailable: 0

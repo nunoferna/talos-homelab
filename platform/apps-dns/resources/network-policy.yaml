@@ -12,6 +12,17 @@ spec:
       app.kubernetes.io/instance: apps-dns
       app.kubernetes.io/name: coredns
   ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s:k8s-app: kube-dns
+            k8s:io.cilium.k8s.policy.serviceaccount: coredns
+      toPorts:
+        - ports:
+            - port: '1053'
+              protocol: UDP
+            - port: '1053'
+              protocol: TCP
     # The Service source-range guard filters original external clients first.
     # VXLAN retains world identity after cross-node Service SNAT.
     - fromEntities: [world]
