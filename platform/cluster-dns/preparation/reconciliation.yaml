@@ -28,3 +28,16 @@ spec:
       kind: Deployment
       name: coredns
       namespace: kube-system
+  # The default Deployment reader also lists ReplicaSets and Pods. Read only
+  # this Deployment's controller-reported status with the existing scoped role.
+  healthCheckExprs:
+    - apiVersion: apps/v1
+      kind: Deployment
+      current: >-
+        has(status.observedGeneration) &&
+        status.observedGeneration == metadata.generation &&
+        has(spec.replicas) && spec.replicas > 0 &&
+        ['replicas', 'updatedReplicas', 'readyReplicas', 'availableReplicas'].all(f,
+          f in status && status[f] == spec.replicas) &&
+        has(status.conditions) &&
+        status.conditions.exists(c, c.type == 'Available' && c.status == 'True')
