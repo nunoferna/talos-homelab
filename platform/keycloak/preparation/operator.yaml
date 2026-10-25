@@ -1,0 +1,64 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: keycloak-operator
+  namespace: flux-system
+spec:
+  interval: 1h
+  url: https://github.com/keycloak/keycloak-k8s-resources
+  ref:
+    # Official 26.8.1 namespace-scoped installation; immutable source revision.
+    commit: 81948d26747a61e5348f0f3c832d017b36a9cb1c
+  ignore: |
+    /*
+    !/kubernetes/
+    /kubernetes/cluster-wide/
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: keycloak-operator
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 30s
+  timeout: 5m
+  path: ./kubernetes
+  targetNamespace: keycloak
+  sourceRef:
+    kind: GitRepository
+    name: keycloak-operator
+  prune: false
+  deletionPolicy: Orphan
+  force: false
+  healthChecks:
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: keycloak-operator
+      namespace: keycloak
+  patches:
+    - target:
+        group: apps
+        version: v1
+        kind: Deployment
+        name: keycloak-operator
+      patch: |
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: keycloak-operator
+        spec:
+          template:
+            spec:
+              securityContext:
+                runAsNonRoot: true
+                seccompProfile:
+                  type: RuntimeDefault
+              containers:
+                - name: keycloak-operator
+                  image: >-
+                    quay.io/keycloak/keycloak-operator:26.8.1@sha256:2f80ad73eaddbf2420e0b235cfe72ec568d053823f1ef4e3ff80b73d0984a0bc
+                  securityContext:
+                    allowPrivilegeEscalation: false
+                    capabilities:
+                      drop: [ALL]

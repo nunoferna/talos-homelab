@@ -1,0 +1,59 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: keycloak-db
+  namespace: keycloak
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  interval: 10m
+  timeout: 10m
+  chart:
+    spec:
+      chart: cluster
+      version: 0.9.0
+      sourceRef:
+        kind: HelmRepository
+        name: cnpg
+        namespace: openbao
+  values:
+    fullnameOverride: keycloak-db
+    type: postgresql
+    version:
+      postgresql: '17'
+    cluster:
+      instances: 1
+      imageName: >-
+        ghcr.io/cloudnative-pg/postgresql:17.11@sha256:70664ebcfa1100361b5bdc28bbf06fdbe08db2dc4ad7bd14de33c5e05fe8ea8e
+      annotations:
+        helm.sh/resource-policy: keep
+      enableSuperuserAccess: false
+      enablePDB: false
+      storage:
+        storageClass: keycloak-postgresql-local
+        size: 4Gi
+      affinity:
+        nodeSelector:
+          kubernetes.io/hostname: '${KEYCLOAK_DB_NODE}'
+      initdb:
+        database: keycloak
+        owner: keycloak
+      postgresql:
+        parameters:
+          max_connections: '40'
+          shared_buffers: 128MB
+        pg_hba:
+          - hostnossl all all all reject
+      resources:
+        requests:
+          cpu: 250m
+          memory: 512Mi
+        limits:
+          cpu: '1'
+          memory: 1Gi
+      monitoring:
+        enabled: false
+        instrumentation:
+          logicalReplication: false
+    backups:
+      enabled: false

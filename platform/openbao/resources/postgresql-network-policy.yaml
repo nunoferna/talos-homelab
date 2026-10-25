@@ -65,6 +65,14 @@ spec:
   egress:
     - toEndpoints:
         - matchLabels:
+            k8s:io.kubernetes.pod.namespace: keycloak
+            cnpg.io/cluster: keycloak-db
+      toPorts:
+        - ports:
+            - port: '8000'
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
             cnpg.io/cluster: openbao-db
       toPorts:
         - ports:

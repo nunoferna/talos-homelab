@@ -17,6 +17,9 @@ requires OpenTofu 1.12.6 because state and plan encryption are enforced.
   `platform-backup`. It renders configuration only, without delivering it to
   nodes. See the staged [backup runbook](../../platform/backup/talos/README.md)
   before enabling it; this flag alone does not establish backups.
+- `keycloak_local_storage_node`: optional, empty/off. Renders the same narrow
+  kubelet conversion for a separate Keycloak database directory on an inventory
+  node distinct from OpenBao. No node delivery, disk provisioning or reboot.
 - `openbao_local_storage_node`: optional, defaults to empty/off. Selects one
   existing inventory node on Talos 1.14.1 for the narrow OpenBao directory bind
   mount and opt-in legacy kubelet schema conversion. Rendering only; compare

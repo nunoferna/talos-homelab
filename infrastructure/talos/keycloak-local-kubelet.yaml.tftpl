@@ -1,0 +1,18 @@
+# Talos 1.14.1 opt-in schema conversion; existing filesystem, no disk changes.
+apiVersion: v1alpha1
+kind: KubeletConfig
+$patch: delete
+---
+machine:
+  kubelet:
+    image: ghcr.io/siderolabs/kubelet:${kubernetes_version}
+    defaultRuntimeSeccompProfileEnabled: true
+    disableManifestsDirectory: true
+    extraMounts:
+      - destination: /var/mnt/keycloak-poc
+        source: /var/mnt/keycloak-poc
+        type: bind
+        options:
+          - bind
+          - rshared
+          - rw

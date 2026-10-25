@@ -11,6 +11,8 @@ spec:
   sourceRef:
     kind: GitRepository
     name: flux-system
+  dependsOn:
+    - name: keycloak-prerequisites
   # Retain persistence and releases when this reconciliation is removed.
   prune: false
   deletionPolicy: Orphan

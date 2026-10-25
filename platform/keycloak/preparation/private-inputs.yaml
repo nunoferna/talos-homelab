@@ -1,0 +1,51 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: keycloak-inputs-reconciler
+  namespace: flux-system
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: keycloak-inputs-reconciler
+  namespace: flux-system
+rules:
+  # Initial create cannot be name-restricted; later access is exact-name only.
+  - apiGroups: ['']
+    resources: [configmaps]
+    verbs: [create]
+  - apiGroups: ['']
+    resources: [configmaps]
+    resourceNames: [keycloak-site]
+    verbs: [get, patch, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: keycloak-inputs-reconciler
+  namespace: flux-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: keycloak-inputs-reconciler
+subjects:
+  - kind: ServiceAccount
+    name: keycloak-inputs-reconciler
+    namespace: flux-system
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: keycloak-inputs
+  namespace: flux-system
+spec:
+  interval: 1m
+  path: ./clusters/homelab/keycloak/inputs
+  sourceRef:
+    kind: GitRepository
+    name: homelab-private
+  serviceAccountName: keycloak-inputs-reconciler
+  prune: false
+  deletionPolicy: Orphan
+  force: false
