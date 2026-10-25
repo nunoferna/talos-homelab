@@ -35,6 +35,8 @@ spec:
     webAuthnPolicyPasswordlessPasskeysEnabled: true
     groups:
       - name: bao-operators
+        clientRoles:
+          account: [manage-account, view-profile]
     clients:
       - clientId: homelab-config
         name: Homelab realm configuration

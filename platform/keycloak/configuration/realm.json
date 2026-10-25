@@ -14,7 +14,13 @@
   "webAuthnPolicyPasswordlessUserVerificationRequirement": "required",
   "groups": [
     {
-      "name": "bao-operators"
+      "name": "bao-operators",
+      "clientRoles": {
+        "account": [
+          "manage-account",
+          "view-profile"
+        ]
+      }
     }
   ],
   "browserFlow": "${KEYCLOAK_APPLICATION_BROWSER_FLOW}",
