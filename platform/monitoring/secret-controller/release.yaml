@@ -1,0 +1,80 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: external-secrets-monitoring
+  namespace: external-secrets
+spec:
+  interval: 10m
+  timeout: 5m
+  releaseName: external-secrets-monitoring
+  chart:
+    spec:
+      chart: external-secrets
+      version: 2.13.0
+      sourceRef:
+        kind: HelmRepository
+        name: external-secrets
+  install:
+    remediation:
+      retries: 1
+  upgrade:
+    remediation:
+      retries: 1
+  values:
+    replicaCount: 1
+    revisionHistoryLimit: 2
+    installCRDs: false
+    scopedRBAC: true
+    scopedNamespace: monitoring
+    processClusterStore: false
+    processClusterExternalSecret: false
+    processClusterPushSecret: false
+    processClusterGenerator: false
+    processPushSecret: false
+    openshiftFinalizers: false
+    systemAuthDelegator: false
+    crds:
+      createClusterSecretStore: false
+      createClusterExternalSecret: false
+      createClusterPushSecret: false
+      createClusterGenerator: false
+      createPushSecret: false
+      annotations:
+        helm.sh/resource-policy: keep
+      conversion:
+        enabled: false
+    rbac:
+      serviceAccountTokenCreate: false
+      servicebindings:
+        create: false
+      aggregateToView: false
+      aggregateToEdit: false
+      aggregateToAdmin: false
+    genericTargets:
+      enabled: false
+    bitwarden-sdk-server:
+      enabled: false
+    webhook:
+      create: false
+    certController:
+      create: false
+    livenessProbe:
+      enabled: true
+    readinessProbe:
+      enabled: true
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    metrics:
+      service:
+        enabled: false
+    serviceMonitor:
+      enabled: false
+    fullnameOverride: external-secrets-monitoring
+    controllerClass: monitoring
+    serviceAccount:
+      name: external-secrets-monitoring

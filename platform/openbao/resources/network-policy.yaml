@@ -13,12 +13,16 @@ spec:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: external-secrets
             k8s:io.cilium.k8s.policy.serviceaccount: external-secrets
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: external-secrets
+            k8s:io.cilium.k8s.policy.serviceaccount: external-secrets-monitoring
       toPorts:
         - ports:
             - port: '8200'
               protocol: TCP
-    - fromEntities: [host, remote-node]
-      # Kubelet HTTPS health probes; not a general application trust grant.
+    - fromEntities:
+        - host
+        - remote-node
       toPorts:
         - ports:
             - port: '8200'
@@ -41,7 +45,8 @@ spec:
               protocol: UDP
             - port: '53'
               protocol: TCP
-    - toEntities: [kube-apiserver]
+    - toEntities:
+        - kube-apiserver
       toPorts:
         - ports:
             - port: '443'

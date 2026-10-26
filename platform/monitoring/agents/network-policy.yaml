@@ -1,0 +1,194 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: observability-kagent-tools
+  namespace: kagent
+spec:
+  endpointSelector:
+    matchLabels:
+      k8s:io.cilium.k8s.policy.serviceaccount: kagent-tools
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kagent
+            k8s:io.cilium.k8s.policy.serviceaccount: homelab-observability
+      toPorts:
+        - ports:
+            - port: '8084'
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: monitoring-controller-tools
+  namespace: kagent
+spec:
+  endpointSelector:
+    matchLabels:
+      k8s:io.cilium.k8s.policy.serviceaccount: kagent-controller
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kagent
+            k8s:io.cilium.k8s.policy.serviceaccount: homelab-observability
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kagent
+            k8s:io.cilium.k8s.policy.serviceaccount: homelab-promql
+      toPorts:
+        - ports:
+            - port: '8083'
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            k8s:io.cilium.k8s.policy.serviceaccount: monitoring-grafana-mcp
+      toPorts:
+        - ports:
+            - port: '8000'
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kagent
+            k8s:io.cilium.k8s.policy.serviceaccount: homelab-observability
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kagent
+            k8s:io.cilium.k8s.policy.serviceaccount: homelab-promql
+      toPorts:
+        - ports:
+            - port: '8080'
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: homelab-observability
+  namespace: kagent
+spec:
+  endpointSelector:
+    matchLabels:
+      k8s:io.cilium.k8s.policy.serviceaccount: homelab-observability
+  ingress:
+    - fromEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: '8080'
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kagent
+            k8s:io.cilium.k8s.policy.serviceaccount: kagent-controller
+      toPorts:
+        - ports:
+            - port: '8080'
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s:k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: '53'
+              protocol: UDP
+            - port: '53'
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kagent
+            k8s:io.cilium.k8s.policy.serviceaccount: kagent-controller
+      toPorts:
+        - ports:
+            - port: '8083'
+              protocol: TCP
+    - toCIDR:
+        - ${OLLAMA_IPV4}/32
+      toPorts:
+        - ports:
+            - port: '11434'
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            k8s:io.cilium.k8s.policy.serviceaccount: monitoring-grafana-mcp
+      toPorts:
+        - ports:
+            - port: '8000'
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kagent
+            k8s:io.cilium.k8s.policy.serviceaccount: kagent-tools
+      toPorts:
+        - ports:
+            - port: '8084'
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kagent
+            k8s:io.cilium.k8s.policy.serviceaccount: homelab-promql
+      toPorts:
+        - ports:
+            - port: '8080'
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: homelab-promql
+  namespace: kagent
+spec:
+  endpointSelector:
+    matchLabels:
+      k8s:io.cilium.k8s.policy.serviceaccount: homelab-promql
+  ingress:
+    - fromEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: '8080'
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kagent
+            k8s:io.cilium.k8s.policy.serviceaccount: kagent-controller
+      toPorts:
+        - ports:
+            - port: '8080'
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kagent
+            k8s:io.cilium.k8s.policy.serviceaccount: homelab-observability
+      toPorts:
+        - ports:
+            - port: '8080'
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s:k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: '53'
+              protocol: UDP
+            - port: '53'
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kagent
+            k8s:io.cilium.k8s.policy.serviceaccount: kagent-controller
+      toPorts:
+        - ports:
+            - port: '8083'
+              protocol: TCP
+    - toCIDR:
+        - ${OLLAMA_IPV4}/32
+      toPorts:
+        - ports:
+            - port: '11434'
+              protocol: TCP

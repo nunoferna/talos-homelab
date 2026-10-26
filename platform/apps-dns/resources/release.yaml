@@ -117,3 +117,4 @@ spec:
           keycloak.apps.internal. 30 IN A ${APPS_GATEWAY_IPV4}
           openbao.apps.internal. 30 IN A ${APPS_GATEWAY_IPV4}
           kagent.apps.internal. 30 IN A ${APPS_GATEWAY_IPV4}
+          grafana.apps.internal. 30 IN A ${APPS_GATEWAY_IPV4}

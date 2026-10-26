@@ -8,7 +8,8 @@ The HTTPS route targets OAuth2 Proxy, with Keycloak passkey login restricted to
 The controller manages only its own namespace. A separate tool service account
 can read workloads, events and logs across namespaces, with no Secret access,
 exec or mutations. The server registers the read-only Kubernetes provider;
-the agent selects four diagnostic tools. Bundled demo agents are disabled.
+the agent selects four diagnostic tools. Bundled demo agents are disabled except the explicitly staged upstream
+Observability and PromQL agents; see `../monitoring/README.md`.
 The agent runtime has no Kubernetes RBAC binding. Treat resource/log content as
 untrusted input; read-only access still exposes operational data to the local model.
 After changing providers, update the agent's tool-provider revision to refresh

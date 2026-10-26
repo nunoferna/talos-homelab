@@ -1,0 +1,23 @@
+apiVersion: external-secrets.io/v1
+kind: SecretStore
+metadata:
+  name: openbao
+spec:
+  provider:
+    vault:
+      server: https://openbao.openbao.svc:8200
+      path: kv
+      version: v2
+      caProvider:
+        type: ConfigMap
+        name: openbao-ca
+        key: ca.crt
+      auth:
+        kubernetes:
+          mountPath: kubernetes-apps
+          role: monitoring-read
+          serviceAccountRef:
+            name: openbao-monitoring
+            audiences:
+              - openbao
+  controller: monitoring

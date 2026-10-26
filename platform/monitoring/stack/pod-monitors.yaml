@@ -1,0 +1,41 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: flux
+  namespace: monitoring
+  labels:
+    release: monitoring-stack
+spec:
+  namespaceSelector:
+    matchNames:
+      - flux-system
+  selector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values:
+          - source-controller
+          - helm-controller
+          - kustomize-controller
+          - notification-controller
+  podMetricsEndpoints:
+    - port: http-prom
+      interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: kagent-tools
+  namespace: monitoring
+  labels:
+    release: monitoring-stack
+spec:
+  namespaceSelector:
+    matchNames:
+      - kagent
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kagent-tools
+  podMetricsEndpoints:
+    - port: http-metrics
+      interval: 30s

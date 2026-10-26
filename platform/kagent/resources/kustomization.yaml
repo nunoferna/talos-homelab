@@ -6,6 +6,7 @@ resources:
   - database.yaml
   - route.yaml
   - network-policy.yaml
+  - agent-defaults.yaml
 configMapGenerator:
   - name: kagent-keycloak-ca
     files:

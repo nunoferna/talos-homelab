@@ -1,0 +1,252 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: monitoring-prerequisites
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 1m
+  timeout: 10m
+  path: ./platform/monitoring/preparation
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  dependsOn:
+    - name: external-secrets
+    - name: cert-manager
+  prune: false
+  force: false
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: monitoring-stack
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 1m
+  timeout: 10m
+  path: ./platform/monitoring/stack
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  dependsOn:
+    - name: monitoring-prerequisites
+  prune: true
+  force: false
+  wait: true
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: monitoring-grafana-operator
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 1m
+  timeout: 10m
+  path: ./platform/monitoring/grafana-operator
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  dependsOn:
+    - name: monitoring-stack
+  prune: true
+  force: false
+  wait: true
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: monitoring-secret-controller
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 1m
+  timeout: 10m
+  path: ./platform/monitoring/secret-controller
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  dependsOn:
+    - name: monitoring-prerequisites
+  prune: true
+  force: false
+  wait: true
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: monitoring-secret-store
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 1m
+  timeout: 10m
+  path: ./platform/monitoring/secret-store
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  dependsOn:
+    - name: monitoring-secret-controller
+    - name: openbao
+  prune: true
+  force: false
+  wait: true
+  healthCheckExprs:
+    - apiVersion: external-secrets.io/v1
+      kind: SecretStore
+      current: |-
+        has(status.conditions) &&
+        status.conditions.exists(c, c.type == 'Ready' &&
+        c.status == 'True')
+  suspend: true
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: monitoring-grafana-secrets
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 1m
+  timeout: 10m
+  path: ./platform/monitoring/grafana-secrets
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  dependsOn:
+    - name: monitoring-secret-store
+    - name: keycloak-realm-config
+  prune: true
+  force: false
+  wait: true
+  healthCheckExprs:
+    - apiVersion: external-secrets.io/v1
+      kind: ExternalSecret
+      current: |-
+        has(status.conditions) &&
+        status.conditions.exists(c, c.type == 'Ready' &&
+        c.status == 'True')
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: monitoring-grafana
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 1m
+  timeout: 10m
+  path: ./platform/monitoring/grafana
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  dependsOn:
+    - name: monitoring-stack
+    - name: monitoring-grafana-secrets
+    - name: apps-gateway
+  prune: true
+  force: false
+  wait: true
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: monitoring-grafana-identity
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 1m
+  timeout: 10m
+  path: ./platform/monitoring/grafana-identity
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  dependsOn:
+    - name: monitoring-grafana
+    - name: monitoring-grafana-operator
+  prune: true
+  force: false
+  wait: true
+  healthCheckExprs:
+    - apiVersion: grafana.integreatly.org/v1beta1
+      kind: GrafanaServiceAccount
+      current: |-
+        has(status.conditions) &&
+        status.conditions.exists(c, c.type == 'ServiceAccountSynchronized' &&
+        c.status == 'True' &&
+        c.observedGeneration == metadata.generation)
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: monitoring-agent-tools
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 1m
+  timeout: 10m
+  path: ./platform/monitoring/agent-tools
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  dependsOn:
+    - name: kagent-crds
+    - name: monitoring-grafana-identity
+  prune: true
+  force: false
+  wait: true
+  healthCheckExprs:
+    - apiVersion: kagent.dev/v1alpha2
+      kind: RemoteMCPServer
+      current: |-
+        has(status.observedGeneration) &&
+        status.observedGeneration == metadata.generation &&
+        has(status.discoveredTools) &&
+        status.discoveredTools.exists(t, t.name == 'query_prometheus') &&
+        has(status.conditions) &&
+        status.conditions.exists(c, c.type == 'Accepted' &&
+        c.status == 'True')
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: monitoring-agents
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 1m
+  timeout: 10m
+  path: ./platform/monitoring/agents
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  dependsOn:
+    - name: kagent
+    - name: monitoring-agent-tools
+  prune: true
+  force: false
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: kagent-site
+        optional: false
+  healthChecks:
+    - apiVersion: kagent.dev/v1alpha2
+      kind: Agent
+      name: observability-agent
+      namespace: kagent
+    - apiVersion: kagent.dev/v1alpha2
+      kind: Agent
+      name: promql-agent
+      namespace: kagent
+  healthCheckExprs:
+    - apiVersion: kagent.dev/v1alpha2
+      kind: Agent
+      current: |-
+        has(status.observedGeneration) &&
+        status.observedGeneration == metadata.generation &&
+        has(status.conditions) &&
+        status.conditions.exists(c, c.type == 'Ready' &&
+        c.status == 'True')

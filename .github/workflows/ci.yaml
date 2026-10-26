@@ -75,6 +75,11 @@ jobs:
         run: python tests/public_manifests.py
       - name: Render the public Flux root
         run: kubectl kustomize clusters/homelab > /tmp/homelab.yaml
+      - name: Render each monitoring reconciliation stage
+        run: |
+          for stage in platform/monitoring/*/; do
+            kubectl kustomize "$stage" > /tmp/monitoring-stage.yaml
+          done
       - name: Render the inactive upstream Talos backup configuration
         run: kubectl kustomize platform/backup/talos > /tmp/talos-backup.yaml
       - name: Verify the inactive one-shot recovery PoC

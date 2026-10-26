@@ -1,0 +1,28 @@
+apiVersion: grafana.integreatly.org/v1beta1
+kind: Grafana
+metadata:
+  name: platform
+spec:
+  external:
+    url: http://grafana.monitoring.svc.cluster.local:80
+    adminUser:
+      name: grafana-bootstrap
+      key: admin-user
+    adminPassword:
+      name: grafana-bootstrap
+      key: admin-password
+  resyncPeriod: 1m
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaServiceAccount
+metadata:
+  name: kagent-observability
+spec:
+  instanceName: platform
+  name: kagent-observability
+  role: Viewer
+  resyncPeriod: 1m
+  tokens:
+    - name: kagent-read
+      secretName: grafana-mcp-token
+      expires: '2027-01-24T00:00:00Z'

@@ -1,0 +1,41 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: monitoring-stack
+  namespace: monitoring
+spec:
+  interval: 1h
+  url: oci://ghcr.io/prometheus-community/charts/kube-prometheus-stack
+  ref:
+    digest: sha256:a7cb3c6e55acc9cd7cc918fe1e4f62f6da57102255939577a051188e586340c0
+  layerSelector:
+    mediaType: application/vnd.cncf.helm.chart.content.v1.tar+gzip
+    operation: copy
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  interval: 1h
+  url: oci://ghcr.io/grafana-community/helm-charts/grafana
+  ref:
+    digest: sha256:58d59d1ca0ccb71d06b37a08f4e397b35918acffdab979288c7321bac3bb1c0c
+  layerSelector:
+    mediaType: application/vnd.cncf.helm.chart.content.v1.tar+gzip
+    operation: copy
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: grafana-operator
+  namespace: monitoring
+spec:
+  interval: 1h
+  url: oci://ghcr.io/grafana/helm-charts/grafana-operator
+  ref:
+    digest: sha256:ae311e8675c11a1d12112eb45676415a797f9dfb7eee91b82f422b53d7c7ab6d
+  layerSelector:
+    mediaType: application/vnd.cncf.helm.chart.content.v1.tar+gzip
+    operation: copy

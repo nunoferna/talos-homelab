@@ -1,0 +1,266 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: monitoring-stack
+  namespace: monitoring
+spec:
+  interval: 10m
+  timeout: 10m
+  releaseName: monitoring-stack
+  chartRef:
+    kind: OCIRepository
+    name: monitoring-stack
+  install:
+    crds: CreateReplace
+    remediation:
+      retries: 0
+  upgrade:
+    crds: CreateReplace
+    remediation:
+      retries: 0
+  values:
+    fullnameOverride: monitoring-stack
+    crds:
+      enabled: true
+      upgradeJob:
+        enabled: false
+    grafana:
+      enabled: false
+      forceDeployDashboards: true
+      forceDeployDatasources: false
+      sidecar:
+        datasources:
+          uid: prometheus
+    kubeEtcd:
+      enabled: false
+    kubeControllerManager:
+      enabled: false
+    kubeScheduler:
+      enabled: false
+    kubeProxy:
+      enabled: false
+    defaultRules:
+      rules:
+        etcd: false
+        kubeControllerManager: false
+        kubeProxy: false
+        kubeSchedulerAlerting: false
+        kubeSchedulerRecording: false
+        kubelet: false
+    kubelet:
+      serviceMonitor:
+        tlsConfig:
+          insecureSkipVerify: false
+        enabled: false
+      namespace: monitoring
+    prometheus-node-exporter:
+      namespaceOverride: monitoring-node-exporter
+      fullnameOverride: monitoring-node-exporter
+      hostNetwork: false
+      hostPID: false
+      hostRootFsMount:
+        enabled: true
+        mountPropagation: HostToContainer
+      service:
+        enableHostPort: false
+      serviceAccount:
+        name: monitoring-node-exporter
+        automountServiceAccountToken: false
+      containerSecurityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      prometheus:
+        monitor:
+          namespace: monitoring
+      resources:
+        requests:
+          cpu: 25m
+          memory: 32Mi
+        limits:
+          cpu: 200m
+          memory: 128Mi
+    kube-state-metrics:
+      serviceAccount:
+        name: monitoring-kube-state-metrics
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          cpu: 300m
+          memory: 256Mi
+      securityContext:
+        enabled: true
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containerSecurityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+      collectors:
+        - cronjobs
+        - daemonsets
+        - deployments
+        - endpointslices
+        - horizontalpodautoscalers
+        - ingresses
+        - jobs
+        - limitranges
+        - namespaces
+        - networkpolicies
+        - nodes
+        - persistentvolumeclaims
+        - persistentvolumes
+        - poddisruptionbudgets
+        - pods
+        - replicasets
+        - replicationcontrollers
+        - resourcequotas
+        - services
+        - statefulsets
+        - storageclasses
+        - volumeattachments
+    prometheusOperator:
+      serviceAccount:
+        name: monitoring-operator
+      namespaces:
+        releaseNamespace: true
+      prometheusInstanceNamespaces:
+        - monitoring
+      alertmanagerInstanceNamespaces:
+        - monitoring
+      alertmanagerConfigNamespaces:
+        - monitoring
+      admissionWebhooks:
+        patch:
+          enabled: false
+        certManager:
+          enabled: true
+        namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: monitoring
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+      prometheusConfigReloader:
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi
+      kubeletService:
+        namespace: monitoring
+    prometheus:
+      serviceAccount:
+        name: monitoring-prometheus
+        createTokenSecret: false
+      prometheusSpec:
+        replicas: 1
+        retention: 48h
+        retentionSize: 1GB
+        scrapeInterval: 30s
+        evaluationInterval: 30s
+        externalLabels:
+          cluster: homelab
+        serviceMonitorNamespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: monitoring
+        podMonitorNamespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: monitoring
+        ruleNamespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: monitoring
+        probeNamespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: monitoring
+        scrapeConfigNamespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: monitoring
+        storageSpec:
+          emptyDir:
+            sizeLimit: 2Gi
+        resources:
+          requests:
+            cpu: 200m
+            memory: 512Mi
+            ephemeral-storage: 512Mi
+          limits:
+            cpu: '1'
+            memory: 2Gi
+            ephemeral-storage: 3Gi
+        additionalArgs:
+          - name: query.max-concurrency
+            value: '8'
+          - name: query.max-samples
+            value: '1000000'
+          - name: query.timeout
+            value: 30s
+        scrapeClasses:
+          - name: unauthenticated
+      controlPlaneScrapeClass:
+        enabled: true
+    alertmanager:
+      serviceAccount:
+        name: monitoring-alertmanager
+      alertmanagerSpec:
+        replicas: 1
+        retention: 48h
+        storage:
+          emptyDir:
+            sizeLimit: 256Mi
+        resources:
+          requests:
+            cpu: 25m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+    coreDns:
+      serviceMonitor:
+        scrapeClass: unauthenticated
+        authorization: null
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: ClusterRoleBinding
+              name: monitoring-stack-operator
+            patch: |-
+              - op: replace
+                path: /kind
+                value: RoleBinding
+              - op: add
+                path: /metadata/namespace
+                value: monitoring
+          - target:
+              kind: ServiceMonitor
+              name: monitoring-node-exporter
+            patch: |-
+              - op: replace
+                path: /metadata/namespace
+                value: monitoring
+              - op: add
+                path: /spec/namespaceSelector
+                value:
+                  matchNames: [monitoring-node-exporter]

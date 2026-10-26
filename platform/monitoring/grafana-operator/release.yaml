@@ -1,0 +1,43 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: grafana-operator
+  namespace: monitoring
+spec:
+  interval: 10m
+  timeout: 10m
+  chartRef:
+    kind: OCIRepository
+    name: grafana-operator
+  install:
+    crds: CreateReplace
+    remediation:
+      retries: 0
+  upgrade:
+    crds: CreateReplace
+    remediation:
+      retries: 0
+  values:
+    namespaceScope: true
+    rbac:
+      useClusterRole: false
+    fullnameOverride: grafana-operator
+    serviceAccount:
+      name: monitoring-grafana-operator
+    crds:
+      immutable: true
+    podSecurityContext:
+      runAsNonRoot: true
+      seccompProfile:
+        type: RuntimeDefault
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    logging:
+      encoder: json
+      level: info
+    defaultResyncPeriod: 1m

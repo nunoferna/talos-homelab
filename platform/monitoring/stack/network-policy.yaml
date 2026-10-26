@@ -1,0 +1,554 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: monitoring-default-deny
+  namespace: monitoring
+spec:
+  endpointSelector: {}
+  ingress: []
+  egress: []
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: monitoring-operator
+  namespace: monitoring
+spec:
+  endpointSelector:
+    matchLabels:
+      k8s:io.cilium.k8s.policy.serviceaccount: monitoring-operator
+  ingress:
+    - fromEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: '10250'
+              protocol: TCP
+    - fromEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: '10250'
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            k8s:io.cilium.k8s.policy.serviceaccount: monitoring-prometheus
+      toPorts:
+        - ports:
+            - port: '10250'
+              protocol: TCP
+  egress:
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: '443'
+              protocol: TCP
+            - port: '6443'
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s:k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: '53'
+              protocol: UDP
+            - port: '53'
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: monitoring-prometheus
+  namespace: monitoring
+spec:
+  endpointSelector:
+    matchLabels:
+      k8s:io.cilium.k8s.policy.serviceaccount: monitoring-prometheus
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            k8s:io.cilium.k8s.policy.serviceaccount: monitoring-grafana
+      toPorts:
+        - ports:
+            - port: '9090'
+              protocol: TCP
+    - fromEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: '9090'
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            k8s:io.cilium.k8s.policy.serviceaccount: monitoring-prometheus
+      toPorts:
+        - ports:
+            - port: '9090'
+              protocol: TCP
+            - port: '8080'
+              protocol: TCP
+  egress:
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: '443'
+              protocol: TCP
+            - port: '6443'
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s:k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: '53'
+              protocol: UDP
+            - port: '53'
+              protocol: TCP
+    - toEntities:
+        - host
+        - remote-node
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: '10250'
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            k8s:io.cilium.k8s.policy.serviceaccount: monitoring-kube-state-metrics
+      toPorts:
+        - ports:
+            - port: '8080'
+              protocol: TCP
+            - port: '8081'
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            k8s:io.cilium.k8s.policy.serviceaccount: monitoring-operator
+      toPorts:
+        - ports:
+            - port: '10250'
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            k8s:io.cilium.k8s.policy.serviceaccount: monitoring-alertmanager
+      toPorts:
+        - ports:
+            - port: '9093'
+              protocol: TCP
+            - port: '8080'
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            k8s:io.cilium.k8s.policy.serviceaccount: monitoring-prometheus
+      toPorts:
+        - ports:
+            - port: '9090'
+              protocol: TCP
+            - port: '8080'
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            k8s:io.cilium.k8s.policy.serviceaccount: monitoring-grafana-mcp
+      toPorts:
+        - ports:
+            - port: '8081'
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            k8s:io.cilium.k8s.policy.serviceaccount: monitoring-grafana-operator
+      toPorts:
+        - ports:
+            - port: '9090'
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring-node-exporter
+            k8s:io.cilium.k8s.policy.serviceaccount: monitoring-node-exporter
+      toPorts:
+        - ports:
+            - port: '9100'
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s:k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: '9153'
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: flux-system
+      toPorts:
+        - ports:
+            - port: '8080'
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kagent
+            k8s:io.cilium.k8s.policy.serviceaccount: kagent-tools
+      toPorts:
+        - ports:
+            - port: '8085'
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: monitoring-kube-state-metrics
+  namespace: monitoring
+spec:
+  endpointSelector:
+    matchLabels:
+      k8s:io.cilium.k8s.policy.serviceaccount: monitoring-kube-state-metrics
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            k8s:io.cilium.k8s.policy.serviceaccount: monitoring-prometheus
+      toPorts:
+        - ports:
+            - port: '8080'
+              protocol: TCP
+            - port: '8081'
+              protocol: TCP
+    - fromEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: '8080'
+              protocol: TCP
+            - port: '8081'
+              protocol: TCP
+  egress:
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: '443'
+              protocol: TCP
+            - port: '6443'
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s:k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: '53'
+              protocol: UDP
+            - port: '53'
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: monitoring-alertmanager
+  namespace: monitoring
+spec:
+  endpointSelector:
+    matchLabels:
+      k8s:io.cilium.k8s.policy.serviceaccount: monitoring-alertmanager
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            k8s:io.cilium.k8s.policy.serviceaccount: monitoring-prometheus
+      toPorts:
+        - ports:
+            - port: '9093'
+              protocol: TCP
+            - port: '8080'
+              protocol: TCP
+    - fromEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: '9093'
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            k8s:io.cilium.k8s.policy.serviceaccount: monitoring-grafana
+      toPorts:
+        - ports:
+            - port: '9093'
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s:k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: '53'
+              protocol: UDP
+            - port: '53'
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: monitoring-grafana
+  namespace: monitoring
+spec:
+  endpointSelector:
+    matchLabels:
+      k8s:io.cilium.k8s.policy.serviceaccount: monitoring-grafana
+  ingress:
+    - fromEntities:
+        - ingress
+      toPorts:
+        - ports:
+            - port: '3000'
+              protocol: TCP
+    - fromEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: '3000'
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            k8s:io.cilium.k8s.policy.serviceaccount: monitoring-grafana-mcp
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            k8s:io.cilium.k8s.policy.serviceaccount: monitoring-grafana-operator
+      toPorts:
+        - ports:
+            - port: '3000'
+              protocol: TCP
+  egress:
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: '443'
+              protocol: TCP
+            - port: '6443'
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s:k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: '53'
+              protocol: UDP
+            - port: '53'
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            k8s:io.cilium.k8s.policy.serviceaccount: monitoring-prometheus
+      toPorts:
+        - ports:
+            - port: '9090'
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            k8s:io.cilium.k8s.policy.serviceaccount: monitoring-alertmanager
+      toPorts:
+        - ports:
+            - port: '9093'
+              protocol: TCP
+    - toEntities:
+        - ingress
+      toPorts:
+        - ports:
+            - port: '443'
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: keycloak
+            app: keycloak
+            app.kubernetes.io/instance: keycloak
+      toPorts:
+        - ports:
+            - port: '8080'
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: monitoring-grafana-operator
+  namespace: monitoring
+spec:
+  endpointSelector:
+    matchLabels:
+      k8s:io.cilium.k8s.policy.serviceaccount: monitoring-grafana-operator
+  ingress:
+    - fromEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: '8081'
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            k8s:io.cilium.k8s.policy.serviceaccount: monitoring-prometheus
+      toPorts:
+        - ports:
+            - port: '9090'
+              protocol: TCP
+  egress:
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: '443'
+              protocol: TCP
+            - port: '6443'
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s:k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: '53'
+              protocol: UDP
+            - port: '53'
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            k8s:io.cilium.k8s.policy.serviceaccount: monitoring-grafana
+      toPorts:
+        - ports:
+            - port: '3000'
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: monitoring-grafana-mcp
+  namespace: monitoring
+spec:
+  endpointSelector:
+    matchLabels:
+      k8s:io.cilium.k8s.policy.serviceaccount: monitoring-grafana-mcp
+  ingress:
+    - fromEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: '8080'
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            k8s:io.cilium.k8s.policy.serviceaccount: monitoring-prometheus
+      toPorts:
+        - ports:
+            - port: '8081'
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kagent
+            k8s:io.cilium.k8s.policy.serviceaccount: kagent-controller
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kagent
+            k8s:io.cilium.k8s.policy.serviceaccount: homelab-observability
+      toPorts:
+        - ports:
+            - port: '8000'
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s:k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: '53'
+              protocol: UDP
+            - port: '53'
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            k8s:io.cilium.k8s.policy.serviceaccount: monitoring-grafana
+      toPorts:
+        - ports:
+            - port: '3000'
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: node-exporter-default-deny
+  namespace: monitoring-node-exporter
+spec:
+  endpointSelector: {}
+  ingress: []
+  egress: []
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: node-exporter-scrape
+  namespace: monitoring-node-exporter
+spec:
+  endpointSelector:
+    matchLabels:
+      k8s:io.cilium.k8s.policy.serviceaccount: monitoring-node-exporter
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            k8s:io.cilium.k8s.policy.serviceaccount: monitoring-prometheus
+      toPorts:
+        - ports:
+            - port: '9100'
+              protocol: TCP
+    - fromEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: '9100'
+              protocol: TCP
+  egress: []
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: monitoring-kagent-tools-metrics
+  namespace: kagent
+spec:
+  endpointSelector:
+    matchLabels:
+      k8s:io.cilium.k8s.policy.serviceaccount: kagent-tools
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            k8s:io.cilium.k8s.policy.serviceaccount: monitoring-prometheus
+      toPorts:
+        - ports:
+            - port: '8085'
+              protocol: TCP
