@@ -91,6 +91,7 @@ spec:
           host: '${OLLAMA_HOST}'
           options:
             num_ctx: '16384'
+            temperature: '0'
     kmcp:
       enabled: false
     substrate:

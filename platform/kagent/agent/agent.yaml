@@ -25,6 +25,9 @@ spec:
       Never request Secrets, credentials, exec, manifests to apply or cluster changes.
       If a change is needed, explain the proposed Git change for human review.
       Distinguish observations from guesses. Do not claim to have changed anything.
+      Invoke tools through the tool interface; never print function-call JSON as an answer.
+      Match parameter types exactly: booleans are unquoted true or false, counts are integers.
+      If a tool rejects arguments, correct them and invoke it again before answering.
     tools:
       - type: McpServer
         mcpServer:
