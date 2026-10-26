@@ -17,6 +17,8 @@ its startup tool discovery through Flux.
 Site values live in private `clusters/homelab/kagent/inputs`. The model uses
 Ollama's local OpenAI-compatible `/v1` endpoint. Its documented client value
 `OPENAI_API_KEY=ollama` is ignored by Ollama and provides no authentication.
+The native `management/ansible/ollama-model.yaml` workflow provisions pinned
+Qwen3 weights; `model/Modelfile` fixes the local alias's context at 16K.
 ESO reads UI and database credentials from OpenBao's
 `kv/homelab/kagent/bootstrap`. PostgreSQL uses bounded `emptyDir` storage:
 replacing its pod loses chat history. This is a single-operator PoC, without HA

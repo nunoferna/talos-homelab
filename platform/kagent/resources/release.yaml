@@ -92,6 +92,7 @@ spec:
         config:
           baseUrl: '${OLLAMA_HOST}/v1'
           temperature: '0'
+          reasoningEffort: none
     kmcp:
       enabled: false
     substrate:
