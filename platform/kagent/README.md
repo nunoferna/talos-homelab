@@ -14,8 +14,10 @@ untrusted input; read-only access still exposes operational data to the local mo
 After changing providers, update the agent's tool-provider revision to refresh
 its startup tool discovery through Flux.
 
-Site values live in private `clusters/homelab/kagent/inputs`. Ollama requires no
-API key. ESO reads UI and database credentials from OpenBao's
+Site values live in private `clusters/homelab/kagent/inputs`. The model uses
+Ollama's local OpenAI-compatible `/v1` endpoint. Its documented client value
+`OPENAI_API_KEY=ollama` is ignored by Ollama and provides no authentication.
+ESO reads UI and database credentials from OpenBao's
 `kv/homelab/kagent/bootstrap`. PostgreSQL uses bounded `emptyDir` storage:
 replacing its pod loses chat history. This is a single-operator PoC, without HA
 or persistent sessions. Keep the Mac's Ollama endpoint available while chatting.

@@ -83,15 +83,15 @@ spec:
       route:
         enabled: false
     providers:
-      default: ollama
-      ollama:
-        provider: Ollama
+      default: openAI
+      openAI:
+        provider: OpenAI
         model: '${OLLAMA_MODEL}'
+        apiKeySecretRef: ''
+        apiKeySecretKey: ''
         config:
-          host: '${OLLAMA_HOST}'
-          options:
-            num_ctx: '16384'
-            temperature: '0'
+          baseUrl: '${OLLAMA_HOST}/v1'
+          temperature: '0'
     kmcp:
       enabled: false
     substrate:

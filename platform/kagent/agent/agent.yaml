@@ -13,7 +13,7 @@ spec:
   type: Declarative
   description: Read-only Kubernetes workload diagnostics using local Ollama.
   declarative:
-    runtime: python
+    runtime: go
     modelConfig: default-model-config
     stream: true
     shareTools: false
@@ -41,6 +41,10 @@ spec:
             - k8s_get_pod_logs
     deployment:
       serviceAccountName: homelab-diagnostics
+      env:
+        # Documented client placeholder; the local Ollama server ignores it.
+        - name: OPENAI_API_KEY
+          value: ollama
       annotations:
         # The runtime classifies MCP tools at startup; refresh after provider changes.
         apps.internal/tool-provider-revision: 0.3.0-k8s-read-only
@@ -60,10 +64,10 @@ spec:
       resources:
         requests:
           cpu: 100m
-          memory: 256Mi
+          memory: 128Mi
         limits:
           cpu: 500m
-          memory: 1Gi
+          memory: 512Mi
       volumes:
         - name: tmp
           emptyDir:
