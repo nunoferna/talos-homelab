@@ -89,6 +89,12 @@ spec:
         limits:
           cpu: 200m
           memory: 128Mi
+      extraArgs:
+        - --no-collector.netdev
+        - --no-collector.netstat
+        - --no-collector.sockstat
+        - --no-collector.arp
+        - --no-collector.conntrack
     kube-state-metrics:
       serviceAccount:
         name: monitoring-kube-state-metrics

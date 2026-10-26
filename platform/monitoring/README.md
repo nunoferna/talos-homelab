@@ -34,6 +34,9 @@ Talos etcd/controller-manager/scheduler and Cilium-specific
 metrics are excluded until their endpoints are configured separately. Node
 exporter alone uses a privileged namespace for read-only host mounts; its
 network is isolated and it does not use host networking or host PID access.
+Network-namespaced collectors are disabled because their traffic/socket counters
+would describe the exporter pod. Host CPU, memory and filesystem metrics remain
+available; host traffic metrics require a separate collection design.
 
 The chart's checksum-pinned upstream certificate-generation jobs bootstrap
 its TLS admission webhook, with failurePolicy Fail. Their temporary chart RBAC

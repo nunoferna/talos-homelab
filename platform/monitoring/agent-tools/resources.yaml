@@ -37,12 +37,15 @@ spec:
             - --address=:8000
             - --allowed-hosts=grafana-mcp.monitoring.svc.cluster.local:8000
             - --healthz-address=:8080
+            - --metrics
             - --metrics-address=:8081
             - --disable-write
             - --enabled-tools=search,datasource,dashboard,prometheus
           env:
             - name: GRAFANA_URL
               value: http://grafana.monitoring.svc.cluster.local:80
+            - name: GRAFANA_ORG_ID
+              value: '1'
             - name: GRAFANA_SERVICE_ACCOUNT_TOKEN_FILE
               value: /credentials/token
           ports:
