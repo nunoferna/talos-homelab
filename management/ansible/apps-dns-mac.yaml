@@ -15,7 +15,7 @@
       ansible.builtin.assert:
         that:
           - ansible_facts['system'] == 'Darwin'
-          - apps_dns_mac_operation in ['preview', 'enable', 'disable']
+          - apps_dns_mac_operation in ['preview', 'enable', 'disable', 'remove-grafana-host-override']
           - apps_dns_site_file.startswith('/')
           - apps_dns_mac_path == '/etc/resolver/apps.internal'
 
@@ -67,9 +67,9 @@
     - name: Report the read-only boundary
       ansible.builtin.debug:
         msg: >-
-          Operation {{ apps_dns_mac_operation }}; only {{ apps_dns_mac_path }}
-          may change after explicit approval. Default DNS, Wi-Fi, DHCP, trust
-          settings, router and cluster DNS remain untouched.
+          Operation {{ apps_dns_mac_operation }} manages either the dedicated
+          {{ apps_dns_mac_path }} resolver or the exact legacy Grafana alias
+          in /etc/hosts. Each operation verifies direct application DNS first.
 
     - name: Enable only after explicit approval and successful direct DNS queries
       when: apps_dns_mac_operation == 'enable'
@@ -130,3 +130,79 @@
         state: absent
       become: true
       when: apps_dns_mac_operation == 'disable'
+
+
+    - name: Remove only the legacy Grafana hosts override
+      when: apps_dns_mac_operation == 'remove-grafana-host-override'
+      block:
+        - name: Inspect the hosts file without following symlinks
+          ansible.builtin.stat:
+            path: /etc/hosts
+            follow: false
+          register: apps_dns_hosts_stat
+
+        - name: Require the protected standard hosts file
+          ansible.builtin.assert:
+            that:
+              - not ansible_check_mode
+              - apps_dns_hosts_stat.stat.isreg
+              - not apps_dns_hosts_stat.stat.islnk
+              - apps_dns_hosts_stat.stat.uid == 0
+              - apps_dns_hosts_stat.stat.mode == '0644'
+              - apps_dns_hosts_stat.stat.size < 65536
+
+        - name: Read the hosts file only into memory
+          ansible.builtin.slurp:
+            src: /etc/hosts
+          register: apps_dns_hosts
+          no_log: true
+
+        - name: Select only active Grafana overrides
+          ansible.builtin.set_fact:
+            apps_dns_grafana_hosts_lines: >-
+              {{ (apps_dns_hosts.content | b64decode).splitlines() |
+              reject('match', '^\s*#') |
+              select('search', '(^|\s)grafana\.apps\.internal(\s|$)') | list }}
+          no_log: true
+
+        - name: Refuse modifying an unexpected override or a line without other aliases
+          ansible.builtin.assert:
+            that:
+              - apps_dns_grafana_hosts_lines | length <= 1
+              - >-
+                apps_dns_grafana_hosts_lines | length == 0 or
+                (apps_dns_grafana_hosts_lines[0].split()[0] == '192.168.1.1' and
+                apps_dns_grafana_hosts_lines[0].split('#')[0].split() | length > 2)
+          no_log: true
+
+        - name: Verify Grafana resolves correctly through application DNS first
+          ansible.builtin.command:
+            argv: >-
+              {{ ['/usr/bin/dig', '@' ~ apps_dns_site.listen_ipv4,
+              'grafana.apps.internal.', 'A', '+short', '+time=2', '+tries=1'] + item }}
+          changed_when: false
+          register: apps_dns_grafana_direct
+          failed_when: >-
+            apps_dns_grafana_direct.rc != 0 or
+            apps_dns_grafana_direct.stdout != apps_dns_site.records.grafana
+          loop: [[], ['+tcp']]
+
+        - name: Remove the exact Grafana alias and preserve every other host mapping
+          ansible.builtin.replace:
+            path: /etc/hosts
+            regexp: >-
+              ^([ \t]*192\.168\.1\.1[ \t]+(?:[^#\n]*?[ \t]+)?)grafana\.apps\.internal(?=[ \t]|$)[ \t]*
+            replace: '\1'
+            backup: true
+          become: true
+
+        - name: Verify the normal macOS resolver now reaches the shared gateway
+          ansible.builtin.command:
+            argv: [/usr/bin/dscacheutil, '-q', host, '-a', name, grafana.apps.internal]
+          changed_when: false
+          register: apps_dns_grafana_system
+          until: >-
+            (apps_dns_grafana_system.stdout_lines |
+            select('equalto', 'ip_address: ' ~ apps_dns_site.records.grafana) | list | length) > 0
+          retries: 10
+          delay: 3
