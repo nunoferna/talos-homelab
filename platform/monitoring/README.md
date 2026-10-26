@@ -8,8 +8,8 @@ are provisioned from Git. Collection continues when the Ollama Mac is offline.
 
 `https://grafana.apps.internal` uses Keycloak passkeys and grants `/bao-operators`
 Viewer access. A dedicated ESO controller reads only `kv/homelab/monitoring/*`.
-The secret-store stage remains suspended until its one-time OpenBao reader
-and Grafana credentials are configured using the private native Ansible workflow.
+The monitoring reader is configured. The Grafana secrets stage remains suspended
+until its credentials are created through the private native Ansible workflow.
 Then remove that suspension in Git; Flux orders the remaining rollout.
 
 Grafana Operator reconciles a Viewer service account and its Kubernetes token

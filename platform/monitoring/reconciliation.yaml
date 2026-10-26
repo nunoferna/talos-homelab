@@ -119,7 +119,6 @@ spec:
         has(status.conditions) &&
         status.conditions.exists(c, c.type == 'Ready' &&
         c.status == 'True')
-  suspend: true
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -140,6 +139,7 @@ spec:
   prune: true
   force: false
   wait: true
+  suspend: true
   healthCheckExprs:
     - apiVersion: external-secrets.io/v1
       kind: ExternalSecret
@@ -187,7 +187,12 @@ spec:
     - name: monitoring-grafana-operator
   prune: true
   force: false
-  wait: true
+  wait: false
+  healthChecks:
+    - apiVersion: grafana.integreatly.org/v1beta1
+      kind: GrafanaServiceAccount
+      name: kagent-observability
+      namespace: monitoring
   healthCheckExprs:
     - apiVersion: grafana.integreatly.org/v1beta1
       kind: GrafanaServiceAccount
