@@ -9,22 +9,23 @@
     ollama_confirmation: ''
     ollama_reviewed_commit: ''
     ollama_repository: "{{ (playbook_dir ~ '/../..') | realpath }}"
-    ollama_base: llama3.1:8b
-    ollama_digest: 46e0c10c039e019119339687c3c1757cc81b9da49709a3b3924863ba87ca666e
-    ollama_alias: homelab-diagnostics:8b
+    ollama_base: qwen3:8b
+    ollama_digest: 500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41
+    ollama_alias: homelab-diagnostics:qwen3-8b
   tasks:
     - name: Require bounded native local execution
       ansible.builtin.assert:
         that:
           - not ansible_check_mode
-          - ollama_operation in ['preview', 'configure']
+          - ollama_operation in ['preview', 'download', 'configure']
           - lookup('ansible.builtin.pipe', 'uname -s') == 'Darwin'
 
     - name: Preview the model configuration
       ansible.builtin.debug:
         msg: >-
-          Reuse the installed llama3.1:8b weights as homelab-diagnostics:8b,
-          with a 16K context and temperature zero. No model download is performed.
+          Download the pinned Qwen3 8B weights only in download mode (about 5.2 GB).
+          Configure mode reuses those weights as homelab-diagnostics:qwen3-8b
+          with a 16K context and temperature zero.
 
     - name: End inactive preview
       ansible.builtin.meta: end_play
@@ -43,10 +44,35 @@
     - name: Require the exact clean published operator code
       ansible.builtin.assert:
         that:
-          - ollama_confirmation == 'configure-local-kagent-model'
+          - >-
+            ollama_confirmation == {'download': 'download-local-kagent-model',
+            'configure': 'configure-local-kagent-model'}[ollama_operation]
           - ollama_git.results[1].stdout == ''
           - ollama_git.results[0].stdout == ollama_git.results[2].stdout
           - ollama_reviewed_commit == ollama_git.results[0].stdout
+
+    - name: Download only the pinned official base model
+      when: ollama_operation == 'download'
+      block:
+        - name: Read the official model manifest over verified HTTPS
+          ansible.builtin.uri:
+            url: https://registry.ollama.ai/v2/library/qwen3/manifests/8b
+            return_content: true
+            use_netrc: false
+            timeout: 20
+          register: ollama_manifest
+
+        - name: Require the reviewed manifest digest before downloading
+          ansible.builtin.assert:
+            that: [ollama_manifest.content | hash('sha256') == ollama_digest]
+
+        - name: Pull the official checksum-verified model through the native CLI
+          ansible.builtin.command:
+            argv: [/usr/local/bin/ollama, pull, "{{ ollama_base }}"]
+          environment:
+            OLLAMA_HOST: http://127.0.0.1:11434
+          timeout: 1200
+          changed_when: true
 
     - name: Read only local installed model metadata
       ansible.builtin.uri:
@@ -56,12 +82,19 @@
         timeout: 10
       register: ollama_models
 
-    - name: Require the installed base weights and refuse replacing an alias
+    - name: Require the exact installed base manifest
       ansible.builtin.assert:
         that:
           - >-
             ollama_models.json.models | selectattr('name', 'equalto', ollama_base) |
             map(attribute='digest') | list == [ollama_digest]
+    - name: End verified model download
+      ansible.builtin.meta: end_play
+      when: ollama_operation == 'download'
+
+    - name: Refuse replacing an existing alias
+      ansible.builtin.assert:
+        that:
           - ollama_models.json.models | selectattr('name', 'equalto', ollama_alias) | list | length == 0
 
     - name: Create only the declared alias from the installed base
