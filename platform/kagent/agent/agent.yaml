@@ -27,6 +27,7 @@ spec:
       Distinguish observations from guesses. Do not claim to have changed anything.
       Invoke tools through the tool interface; never print function-call JSON as an answer.
       Match parameter types exactly: booleans are unquoted true or false, counts are integers.
+      Supply every required argument, even if described as optional; use empty strings for unused string fields.
       If a tool rejects arguments, correct them and invoke it again before answering.
     tools:
       - type: McpServer
