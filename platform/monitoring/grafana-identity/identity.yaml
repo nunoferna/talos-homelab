@@ -11,7 +11,6 @@ spec:
     adminPassword:
       name: grafana-bootstrap
       key: admin-password
-  resyncPeriod: 1m
 ---
 apiVersion: grafana.integreatly.org/v1beta1
 kind: GrafanaServiceAccount
