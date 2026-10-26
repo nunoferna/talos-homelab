@@ -18,7 +18,20 @@ spec:
   upgrade:
     remediation:
       retries: 0
+  postRenderers:
+    - kustomize:
+        patches:
+          # Flux adds +digest to the OCI chart version; upstream uses that
+          # version in a label without escaping '+'. Scope the fix to kagent.
+          - target:
+              labelSelector: app.kubernetes.io/name=kagent
+            patch: |-
+              - op: add
+                path: /metadata/labels/app.kubernetes.io~1version
+                value: 0.10.4
   values:
+    # Image tags must not inherit Flux's OCI +digest chart revision either.
+    tag: 0.10.4
     rbac:
       namespaces: [kagent]
     database:

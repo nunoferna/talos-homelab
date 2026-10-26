@@ -54,6 +54,11 @@ spec:
   prune: true
   force: false
   wait: true
+  healthCheckExprs:
+    - apiVersion: external-secrets.io/v1
+      kind: ExternalSecret
+      current: >-
+        has(status.conditions) && status.conditions.exists(c, c.type == 'Ready' && c.status == 'True')
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -100,3 +105,9 @@ spec:
   prune: true
   force: false
   wait: true
+  healthCheckExprs:
+    - apiVersion: kagent.dev/v1alpha2
+      kind: Agent
+      current: >-
+        has(status.observedGeneration) && status.observedGeneration == metadata.generation &&
+        has(status.conditions) && status.conditions.exists(c, c.type == 'Ready' && c.status == 'True')
