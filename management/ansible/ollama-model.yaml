@@ -1,0 +1,96 @@
+---
+- name: Configure the bounded local model for the kagent PoC
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+  vars:
+    ollama_operation: preview
+    ollama_confirmation: ''
+    ollama_reviewed_commit: ''
+    ollama_repository: "{{ (playbook_dir ~ '/../..') | realpath }}"
+    ollama_base: llama3.1:8b
+    ollama_digest: 46e0c10c039e019119339687c3c1757cc81b9da49709a3b3924863ba87ca666e
+    ollama_alias: homelab-diagnostics:8b
+  tasks:
+    - name: Require bounded native local execution
+      ansible.builtin.assert:
+        that:
+          - not ansible_check_mode
+          - ollama_operation in ['preview', 'configure']
+          - lookup('ansible.builtin.pipe', 'uname -s') == 'Darwin'
+
+    - name: Preview the model configuration
+      ansible.builtin.debug:
+        msg: >-
+          Reuse the installed llama3.1:8b weights as homelab-diagnostics:8b,
+          with a 16K context and temperature zero. No model download is performed.
+
+    - name: End inactive preview
+      ansible.builtin.meta: end_play
+      when: ollama_operation == 'preview'
+
+    - name: Read the operator code revision and published main
+      ansible.builtin.command:
+        argv: "{{ item }}"
+      loop:
+        - [git, '-C', "{{ ollama_repository }}", rev-parse, HEAD]
+        - [git, '-C', "{{ ollama_repository }}", status, --porcelain]
+        - [gh, api, repos/nunoferna/talos-homelab/commits/main, --jq, .sha]
+      changed_when: false
+      register: ollama_git
+
+    - name: Require the exact clean published operator code
+      ansible.builtin.assert:
+        that:
+          - ollama_confirmation == 'configure-local-kagent-model'
+          - ollama_git.results[1].stdout == ''
+          - ollama_git.results[0].stdout == ollama_git.results[2].stdout
+          - ollama_reviewed_commit == ollama_git.results[0].stdout
+
+    - name: Read only local installed model metadata
+      ansible.builtin.uri:
+        url: http://127.0.0.1:11434/api/tags
+        use_proxy: false
+        use_netrc: false
+        timeout: 10
+      register: ollama_models
+
+    - name: Require the installed base weights and refuse replacing an alias
+      ansible.builtin.assert:
+        that:
+          - >-
+            ollama_models.json.models | selectattr('name', 'equalto', ollama_base) |
+            map(attribute='digest') | list == [ollama_digest]
+          - ollama_models.json.models | selectattr('name', 'equalto', ollama_alias) | list | length == 0
+
+    - name: Create only the declared alias from the installed base
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/ollama
+          - create
+          - "{{ ollama_alias }}"
+          - '-f'
+          - "{{ ollama_repository }}/platform/kagent/model/Modelfile"
+      environment:
+        OLLAMA_HOST: http://127.0.0.1:11434
+      changed_when: true
+      timeout: 120
+
+    - name: Read back the alias parameters
+      ansible.builtin.uri:
+        url: http://127.0.0.1:11434/api/show
+        method: POST
+        body_format: json
+        body:
+          model: "{{ ollama_alias }}"
+        use_proxy: false
+        use_netrc: false
+        timeout: 10
+      register: ollama_alias_metadata
+
+    - name: Verify the context bound and deterministic sampling
+      ansible.builtin.assert:
+        that:
+          - ollama_alias_metadata.json.parameters is regex('(?m)^num_ctx\\s+16384\\s*$')
+          - ollama_alias_metadata.json.parameters is regex('(?m)^temperature\\s+0(?:\\.0)?\\s*$')
