@@ -125,11 +125,10 @@ spec:
         namespaces: []
       tools:
         loglevel: info
-        enabledTools:
-          - k8s_get_resources
-          - k8s_get_events
-          - k8s_describe_resource
-          - k8s_get_pod_logs
+        # --tools selects providers, not individual MCP tool names.
+        # The Agent separately selects its four diagnostic tools.
+        enabledTools: [k8s]
+        args: [--read-only]
         resources:
           requests:
             cpu: 50m
