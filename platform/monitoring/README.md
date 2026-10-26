@@ -36,5 +36,5 @@ network is isolated and it does not use host networking or host PID access.
 The chart's checksum-pinned upstream certificate-generation jobs bootstrap
 its TLS admission webhook, with failurePolicy Fail. Their temporary chart RBAC
 is removed after successful hooks. The gateway-only cert-manager scope is
-unchanged. Default rules are staged separately until this first bootstrap is
-healthy; they are then enabled in Git.
+unchanged. Default alert and recording rules are enabled after the verified
+first certificate bootstrap.

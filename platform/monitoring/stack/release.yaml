@@ -47,7 +47,7 @@ spec:
         kubeSchedulerAlerting: false
         kubeSchedulerRecording: false
         kubelet: false
-      create: false
+      create: true
     kubelet:
       serviceMonitor:
         tlsConfig:
