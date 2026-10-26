@@ -6,13 +6,6 @@ metadata:
 automountServiceAccountToken: false
 ---
 apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: homelab-promql
-  namespace: kagent
-automountServiceAccountToken: false
----
-apiVersion: v1
 kind: ConfigMap
 metadata:
   name: kagent-observability-values
@@ -22,10 +15,6 @@ metadata:
 data:
   values.yaml: |
     observability-agent:
-      enabled: true
-      runtime: go
-      modelConfigRef: default-model-config
-    promql-agent:
       enabled: true
       runtime: go
       modelConfigRef: default-model-config

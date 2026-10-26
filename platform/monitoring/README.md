@@ -19,7 +19,9 @@ file on each request. Rotate it by advancing the token expiry in
 Cilium permits only the kagent controller and observation runtime to connect.
 Write tools and caller-selected Grafana destinations are disabled.
 
-The pinned kagent 0.10.4 chart supplies Observability and PromQL agents. The
+The pinned kagent 0.10.4 chart supplies Observability and PromQL agents. Flux
+waits for the PromQL helper before enabling Observability, avoiding a first-install
+agent-reference race. The
 observability overlay restricts its tools and instructions to evidence gathering;
 neither agent has Kubernetes RBAC. Changes remain human-reviewed Git changes.
 Use queries such as `up`, pod restart rates and `ALERTS{alertstate="firing"}`.
