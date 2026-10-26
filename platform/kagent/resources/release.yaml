@@ -1,0 +1,181 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kagent
+  namespace: kagent
+spec:
+  interval: 10m
+  timeout: 10m
+  releaseName: kagent
+  chartRef:
+    kind: OCIRepository
+    name: kagent
+  dependsOn:
+    - name: kagent-crds
+  install:
+    remediation:
+      retries: 0
+  upgrade:
+    remediation:
+      retries: 0
+  values:
+    rbac:
+      namespaces: [kagent]
+    database:
+      postgres:
+        bundled:
+          enabled: false
+        urlFile: /database/url
+        vectorEnabled: false
+        sessionRetentionDays: 1
+        pool:
+          maxConns: 4
+          minConns: 0
+    controller:
+      replicas: 1
+      auth:
+        mode: trusted-proxy
+        userIdClaim: sub
+      watchNamespaces: [kagent]
+      a2aBaseUrl: https://kagent.apps.internal
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+      volumes:
+        - name: database-url
+          secret:
+            secretName: kagent-bootstrap
+            defaultMode: 292
+            items:
+              - key: database-url
+                path: url
+      volumeMounts:
+        - name: database-url
+          mountPath: /database
+          readOnly: true
+    ui:
+      replicas: 1
+      externalUrl: https://kagent.apps.internal
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+      route:
+        enabled: false
+    providers:
+      default: ollama
+      ollama:
+        provider: Ollama
+        model: '${OLLAMA_MODEL}'
+        config:
+          host: '${OLLAMA_HOST}'
+          options:
+            num_ctx: '16384'
+    kmcp:
+      enabled: false
+    substrate:
+      enabled: false
+    k8s-agent:
+      enabled: false
+    kgateway-agent:
+      enabled: false
+    istio-agent:
+      enabled: false
+    promql-agent:
+      enabled: false
+    observability-agent:
+      enabled: false
+    argo-rollouts-agent:
+      enabled: false
+    helm-agent:
+      enabled: false
+    cilium-policy-agent:
+      enabled: false
+    cilium-manager-agent:
+      enabled: false
+    cilium-debug-agent:
+      enabled: false
+    grafana-mcp:
+      enabled: false
+    kagent-tools:
+      enabled: true
+      rbac:
+        readOnly: true
+        allowSecrets: false
+        namespaces: []
+      tools:
+        loglevel: info
+        enabledTools:
+          - k8s_get_resources
+          - k8s_get_events
+          - k8s_describe_resource
+          - k8s_get_pod_logs
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+    oauth2-proxy:
+      enabled: true
+      replicaCount: 1
+      config:
+        existingSecret: kagent-bootstrap
+      extraVolumes:
+        - name: keycloak-ca
+          configMap:
+            name: kagent-keycloak-ca
+      extraVolumeMounts:
+        - name: keycloak-ca
+          mountPath: /etc/keycloak-ca
+          readOnly: true
+      extraEnv:
+        - name: OIDC_ISSUER_URL
+          value: https://keycloak.apps.internal/realms/homelab
+        - name: OIDC_REDIRECT_URL
+          value: https://kagent.apps.internal/oauth2/callback
+        - name: UPSTREAM_URL
+          value: http://kagent-ui:8080
+      extraArgs:
+        # A list replaces upstream's bypass regex and branded-login defaults.
+        - --provider=oidc
+        - --oidc-issuer-url=$(OIDC_ISSUER_URL)
+        - --redirect-url=$(OIDC_REDIRECT_URL)
+        - --upstream=$(UPSTREAM_URL)
+        - --email-domain=*
+        - --scope=openid profile email
+        - --allowed-group=/bao-operators
+        - --provider-ca-file=/etc/keycloak-ca/ca.crt
+        - --reverse-proxy=true
+        - --code-challenge-method=S256
+        - --insecure-oidc-skip-nonce=false
+        - --skip-provider-button=true
+        - --skip-jwt-bearer-tokens=false
+        - --pass-authorization-header=true
+        - --set-authorization-header=true
+        - --skip-auth-route=^/(ping|ready)$
+        - --cookie-name=__Host-kagent
+        - --cookie-secure=true
+        - --cookie-path=/
+        - --cookie-samesite=lax
+        - --cookie-expire=1h
+        - --cookie-refresh=5m
+        - --upstream-timeout=5m
+        - --silence-ping-logging=true
+        - --request-logging=false
+        - --auth-logging=false
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          cpu: 250m
+          memory: 128Mi

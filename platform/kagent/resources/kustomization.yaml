@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: kagent
+resources:
+  - release.yaml
+  - database.yaml
+  - route.yaml
+  - network-policy.yaml
+configMapGenerator:
+  - name: kagent-keycloak-ca
+    files:
+      - ca.crt=ca.crt
+generatorOptions:
+  disableNameSuffixHash: true

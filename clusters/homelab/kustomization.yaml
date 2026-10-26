@@ -13,3 +13,4 @@ resources:
   - ../../platform/apps-pki
   - ../../platform/cluster-dns
   - ../../platform/keycloak
+  - ../../platform/kagent
