@@ -11,6 +11,8 @@ exec or mutations. The server registers the read-only Kubernetes provider;
 the agent selects four diagnostic tools. Bundled demo agents are disabled.
 The agent runtime has no Kubernetes RBAC binding. Treat resource/log content as
 untrusted input; read-only access still exposes operational data to the local model.
+After changing providers, update the agent's tool-provider revision to refresh
+its startup tool discovery through Flux.
 
 Site values live in private `clusters/homelab/kagent/inputs`. Ollama requires no
 API key. ESO reads UI and database credentials from OpenBao's

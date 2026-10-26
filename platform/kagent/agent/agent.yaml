@@ -38,6 +38,9 @@ spec:
             - k8s_get_pod_logs
     deployment:
       serviceAccountName: homelab-diagnostics
+      annotations:
+        # The runtime classifies MCP tools at startup; refresh after provider changes.
+        apps.internal/tool-provider-revision: 0.3.0-k8s-read-only
       labels:
         apps.internal/kagent-role: diagnostics
       podSecurityContext:
