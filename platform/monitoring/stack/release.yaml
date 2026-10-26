@@ -47,6 +47,7 @@ spec:
         kubeSchedulerAlerting: false
         kubeSchedulerRecording: false
         kubelet: false
+      create: false
     kubelet:
       serviceMonitor:
         tlsConfig:
@@ -147,12 +148,22 @@ spec:
         - monitoring
       admissionWebhooks:
         patch:
-          enabled: false
-        certManager:
           enabled: true
+          image:
+            sha: 778d97dc3986355625e14392419b3364c487a7c807d4d86ddad1df369129b082
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+        certManager:
+          enabled: false
         namespaceSelector:
           matchLabels:
             kubernetes.io/metadata.name: monitoring
+        failurePolicy: Fail
       resources:
         requests:
           cpu: 100m
