@@ -139,7 +139,6 @@ spec:
   prune: true
   force: false
   wait: true
-  suspend: true
   healthCheckExprs:
     - apiVersion: external-secrets.io/v1
       kind: ExternalSecret

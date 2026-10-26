@@ -8,9 +8,9 @@ are provisioned from Git. Collection continues when the Ollama Mac is offline.
 
 `https://grafana.apps.internal` uses Keycloak passkeys and grants `/bao-operators`
 Viewer access. A dedicated ESO controller reads only `kv/homelab/monitoring/*`.
-The monitoring reader is configured. The Grafana secrets stage remains suspended
-until its credentials are created through the private native Ansible workflow.
-Then remove that suspension in Git; Flux orders the remaining rollout.
+The monitoring reader and initial Grafana credentials are configured through
+the private native Ansible workflow. Flux orders the application, Viewer identity
+and agent rollout after ESO validates those inputs.
 
 Grafana Operator reconciles a Viewer service account and its Kubernetes token
 Secret after a Grafana database reset. The official Grafana MCP 2.1.1 reads that
