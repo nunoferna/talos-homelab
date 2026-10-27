@@ -1,0 +1,88 @@
+---
+- name: Rehydrate Keycloak's original PostgreSQL cluster
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: postgresql.cnpg.io/v1
+      kind: Cluster
+      metadata:
+        name: keycloak-db
+        namespace: keycloak
+        uid: '{{ cluster_power_site.lifecycle.object_uids.keycloak_database }}'
+        annotations:
+          cnpg.io/hibernation: null
+  no_log: true
+
+- name: Wait for the original Keycloak database to be Ready
+  kubernetes.core.k8s_info:
+    api_version: postgresql.cnpg.io/v1
+    kind: Cluster
+    name: keycloak-db
+    namespace: keycloak
+  register: cluster_lifecycle_keycloak_database_ready
+  until: >-
+    cluster_lifecycle_keycloak_database_ready.resources | length == 1 and
+    cluster_lifecycle_keycloak_database_ready.resources[0].metadata.uid ==
+    cluster_power_site.lifecycle.object_uids.keycloak_database and
+    cluster_lifecycle_keycloak_database_ready.resources[0].status.readyInstances | default(0) == 1
+  retries: 180
+  delay: 5
+  no_log: true
+
+- name: Restore Keycloak through its original operator resource
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: k8s.keycloak.org/v2beta1
+      kind: Keycloak
+      metadata:
+        name: keycloak
+        namespace: keycloak
+        uid: '{{ cluster_power_site.lifecycle.object_uids.keycloak }}'
+      spec:
+        instances: 1
+  no_log: true
+
+- name: Wait for Keycloak before resuming periodic configuration
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: StatefulSet
+    name: keycloak
+    namespace: keycloak
+  register: cluster_lifecycle_keycloak_ready
+  until: >-
+    cluster_lifecycle_keycloak_ready.resources | length == 1 and
+    cluster_lifecycle_keycloak_ready.resources[0].metadata.uid ==
+    cluster_power_site.lifecycle.object_uids.keycloak_server and
+    cluster_lifecycle_keycloak_ready.resources[0].status.readyReplicas | default(0) == 1
+  retries: 180
+  delay: 5
+  no_log: true
+
+- name: Restore the existing Keycloak configuration schedule
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: batch/v1
+      kind: CronJob
+      metadata:
+        name: keycloak-config
+        namespace: keycloak
+        uid: '{{ cluster_power_site.lifecycle.object_uids.keycloak_config }}'
+      spec:
+        suspend: false
+  no_log: true
+
+- name: Return the protected Keycloak leaves to Git ownership
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: '{{ cluster_lifecycle_live[item].metadata.name }}'
+        namespace: flux-system
+        uid: '{{ cluster_power_site.lifecycle.object_uids[item] }}'
+        annotations:
+          kustomize.toolkit.fluxcd.io/reconcile: null
+          homelab.local/power-phase: null
+      spec:
+        suspend: false
+  loop: [keycloak_reconciliation, keycloak_database_reconciliation, keycloak_config_reconciliation]
+  no_log: true

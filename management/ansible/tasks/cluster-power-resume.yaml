@@ -99,6 +99,9 @@
       - (cluster_lifecycle_bao_status.stdout | from_json).storage_type == 'postgresql'
       - (cluster_lifecycle_bao_status.stdout | from_json).version == '2.7.1'
 
+- name: Restore the retained Keycloak database before its application and periodic configuration
+  ansible.builtin.include_tasks: cluster-power-keycloak-resume.yaml
+
 - name: Restore the two Helm releases to their existing Git-declared reconciliation
   kubernetes.core.k8s:
     definition:

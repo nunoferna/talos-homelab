@@ -38,3 +38,41 @@
     that: [item.resources | length == 0]
   loop: '{{ cluster_lifecycle_stopped_pods.results }}'
   no_log: true
+
+- name: Require Keycloak reconciliation paused and both its writer and database stopped
+  ansible.builtin.assert:
+    that:
+      - cluster_lifecycle_live[item].spec.suspend | default(false) | bool
+      - >-
+        (cluster_lifecycle_live[item].metadata.annotations | default({})).get(
+        'kustomize.toolkit.fluxcd.io/reconcile', '') == 'disabled'
+      - >-
+        (cluster_lifecycle_live[item].metadata.annotations | default({})).get(
+        'homelab.local/power-phase', '') == 'preparing'
+  loop: [keycloak_reconciliation, keycloak_database_reconciliation, keycloak_config_reconciliation]
+
+- name: Require Keycloak writer and periodic configuration stopped with clean database hibernation
+  ansible.builtin.assert:
+    that:
+      - cluster_lifecycle_live.keycloak.spec.instances == 0
+      - cluster_lifecycle_live.keycloak_config.spec.suspend | default(false) | bool
+      - cluster_lifecycle_live.keycloak_config.status.active | default([]) | length == 0
+      - >-
+        (cluster_lifecycle_live.keycloak_database.status.conditions | default([]) |
+        selectattr('type', 'equalto', 'cnpg.io/hibernation') | map(attribute='status') | list) == ['True']
+
+- name: Reject remaining Keycloak or database pods before node shutdown
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: keycloak
+    label_selectors: ['{{ item }}']
+  loop: ['app=keycloak,app.kubernetes.io/instance=keycloak', 'cnpg.io/cluster=keycloak-db']
+  register: cluster_lifecycle_keycloak_stopped
+  no_log: true
+
+- name: Require no Keycloak persistence consumer, including terminating pods
+  ansible.builtin.assert:
+    that: [item.resources | length == 0]
+  loop: '{{ cluster_lifecycle_keycloak_stopped.results }}'
+  no_log: true

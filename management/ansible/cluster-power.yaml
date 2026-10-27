@@ -56,9 +56,14 @@
     - name: Require reviewed site identity pins and exact original etcd voters
       ansible.builtin.assert:
         that:
-          - cluster_power_site.lifecycle.object_uids.keys() | length == 8
+          - cluster_power_site.lifecycle.object_uids.keys() | length == 17
           - cluster_power_site.etcd_member_ids.keys() | sort == ['cp01', 'cp02', 'cp03']
           - cluster_power_inventory.homelab.name == 'homelab'
+
+    - name: Require the reviewed disposable monitoring inventory
+      ansible.builtin.assert:
+        that:
+          - cluster_power_site.lifecycle.disposable_statefulsets.keys() | sort == ['alertmanager', 'prometheus']
 
     - name: Validate every reviewed MAC and address before any multi-node wake packet
       ansible.builtin.assert:
@@ -126,7 +131,7 @@
           default({})).get('homelab.local/power-phase', 'normal') }}.
           Server current={{ cluster_lifecycle_live.server.status.currentRevision }};
           reviewed restart={{ cluster_lifecycle_live.server.status.updateRevision }}.
-          Preview changes nothing. Only OpenBao reconciliation is paused during maintenance;
+          Preview changes nothing. OpenBao and Keycloak reconciliation pause during maintenance;
           no PVC, PV, database, identity, unseal key or Talos configuration is replaced.
 
     - name: Prepare application shutdown using standard Kubernetes modules and CNPG hibernation

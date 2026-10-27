@@ -10,6 +10,27 @@
       - {key: database, api: postgresql.cnpg.io/v1, kind: Cluster, name: openbao-db, ns: openbao}
       - {key: pvc, api: v1, kind: PersistentVolumeClaim, name: openbao-db-1, ns: openbao}
       - {key: pv, api: v1, kind: PersistentVolume, name: openbao-postgresql-data, ns: ''}
+      - key: keycloak_reconciliation
+        api: kustomize.toolkit.fluxcd.io/v1
+        kind: Kustomization
+        name: keycloak
+        ns: flux-system
+      - key: keycloak_database_reconciliation
+        api: kustomize.toolkit.fluxcd.io/v1
+        kind: Kustomization
+        name: keycloak-database
+        ns: flux-system
+      - key: keycloak_config_reconciliation
+        api: kustomize.toolkit.fluxcd.io/v1
+        kind: Kustomization
+        name: keycloak-realm-config
+        ns: flux-system
+      - {key: keycloak, api: k8s.keycloak.org/v2beta1, kind: Keycloak, name: keycloak, ns: keycloak}
+      - {key: keycloak_server, api: apps/v1, kind: StatefulSet, name: keycloak, ns: keycloak}
+      - {key: keycloak_database, api: postgresql.cnpg.io/v1, kind: Cluster, name: keycloak-db, ns: keycloak}
+      - {key: keycloak_pvc, api: v1, kind: PersistentVolumeClaim, name: keycloak-db-1, ns: keycloak}
+      - {key: keycloak_pv, api: v1, kind: PersistentVolume, name: keycloak-postgresql-data, ns: ''}
+      - {key: keycloak_config, api: batch/v1, kind: CronJob, name: keycloak-config, ns: keycloak}
     cluster_lifecycle_live: {}
 
 - name: Read only non-Secret workload and persistence objects
@@ -56,10 +77,18 @@
 - name: Require exactly the known persistence boundary and retained bound volume
   ansible.builtin.assert:
     that:
-      - cluster_lifecycle_pvcs.resources | length == 1
-      - cluster_lifecycle_pvcs.resources[0].metadata.uid == cluster_power_site.lifecycle.object_uids.pvc
-      - cluster_lifecycle_stateful.results[0].resources | length == 1
-      - cluster_lifecycle_stateful.results[1].resources | length == 1
+      - cluster_lifecycle_pvcs.resources | length == 2
+      - >-
+        cluster_lifecycle_pvcs.resources | map(attribute='metadata.uid') | sort ==
+        [cluster_power_site.lifecycle.object_uids.pvc, cluster_power_site.lifecycle.object_uids.keycloak_pvc] | sort
+      - >-
+        cluster_lifecycle_stateful.results[0].resources | map(attribute='metadata.uid') | sort ==
+        ([cluster_power_site.lifecycle.object_uids.server, cluster_power_site.lifecycle.object_uids.keycloak_server] +
+        cluster_power_site.lifecycle.disposable_statefulsets.values() | list) | sort
+      - >-
+        cluster_lifecycle_stateful.results[1].resources | map(attribute='metadata.uid') | sort ==
+        [cluster_power_site.lifecycle.object_uids.database,
+        cluster_power_site.lifecycle.object_uids.keycloak_database] | sort
       - cluster_lifecycle_live.database.spec.instances == 1
       - >-
         cluster_lifecycle_live.server.status.updateRevision ==
@@ -69,3 +98,30 @@
       - cluster_lifecycle_live.pv.spec.claimRef.uid == cluster_lifecycle_live.pvc.metadata.uid
       - cluster_lifecycle_live.pv.spec.persistentVolumeReclaimPolicy == 'Retain'
     fail_msg: Persistence changed; extend and review the lifecycle plan instead of powering off unknown workloads.
+
+- name: Require unchanged Keycloak persistence and no pending server revision
+  ansible.builtin.assert:
+    that:
+      - cluster_lifecycle_live.keycloak.spec.instances in [0, 1]
+      - cluster_lifecycle_live.keycloak_database.spec.instances == 1
+      - cluster_lifecycle_live.keycloak_pvc.status.phase == 'Bound'
+      - cluster_lifecycle_live.keycloak_pvc.spec.volumeName == cluster_lifecycle_live.keycloak_pv.metadata.name
+      - cluster_lifecycle_live.keycloak_pv.spec.claimRef.uid == cluster_lifecycle_live.keycloak_pvc.metadata.uid
+      - cluster_lifecycle_live.keycloak_pv.spec.persistentVolumeReclaimPolicy == 'Retain'
+      - >-
+        cluster_lifecycle_live.keycloak_server.status.currentRevision ==
+        cluster_lifecycle_live.keycloak_server.status.updateRevision
+
+- name: Require the explicitly disposable monitoring StatefulSets to have no host or persistent volumes
+  ansible.builtin.assert:
+    that:
+      - item.metadata.namespace == 'monitoring'
+      - item.spec.volumeClaimTemplates | default([]) | length == 0
+      - item.spec.template.spec.volumes | selectattr('persistentVolumeClaim', 'defined') | list | length == 0
+      - item.spec.template.spec.volumes | selectattr('hostPath', 'defined') | list | length == 0
+      - item.spec.template.spec.volumes | selectattr('csi', 'defined') | list | length == 0
+  loop: >-
+    {{ cluster_lifecycle_stateful.results[0].resources |
+    selectattr('metadata.uid', 'in', cluster_power_site.lifecycle.disposable_statefulsets.values() | list) | list }}
+  loop_control:
+    label: '{{ item.metadata.name }}'

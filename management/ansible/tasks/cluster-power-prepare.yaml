@@ -33,6 +33,9 @@
 - name: Ensure the parent has observed the per-resource pause before changing its children
   ansible.builtin.include_tasks: cluster-power-root-sync.yaml
 
+- name: Quiesce Keycloak and its PostgreSQL database through their native APIs
+  ansible.builtin.include_tasks: cluster-power-keycloak-prepare.yaml
+
 - name: Pause only OpenBao and database Helm releases; keep the CNPG operator running
   kubernetes.core.k8s:
     definition:

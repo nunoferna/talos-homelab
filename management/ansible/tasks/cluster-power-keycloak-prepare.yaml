@@ -1,0 +1,154 @@
+---
+- name: Refuse unrelated Keycloak maintenance pauses
+  ansible.builtin.assert:
+    that:
+      - >-
+        (not (cluster_lifecycle_live[item].spec.suspend | default(false) | bool) and
+        (cluster_lifecycle_live[item].metadata.annotations | default({})).get(
+        'kustomize.toolkit.fluxcd.io/reconcile', '') != 'disabled') or
+        (cluster_lifecycle_live[item].metadata.annotations | default({})).get(
+        'homelab.local/power-phase', '') == 'preparing'
+  loop: [keycloak_reconciliation, keycloak_database_reconciliation, keycloak_config_reconciliation]
+
+- name: Refuse an unrelated stopped writer, config schedule or hibernated database
+  ansible.builtin.assert:
+    that:
+      - >-
+        cluster_lifecycle_live.keycloak.spec.instances == 1 or
+        (cluster_lifecycle_live.keycloak_reconciliation.metadata.annotations | default({})).get(
+        'homelab.local/power-phase', '') == 'preparing'
+      - >-
+        not (cluster_lifecycle_live.keycloak_config.spec.suspend | default(false) | bool) or
+        (cluster_lifecycle_live.keycloak_config_reconciliation.metadata.annotations | default({})).get(
+        'homelab.local/power-phase', '') == 'preparing'
+      - >-
+        (cluster_lifecycle_live.keycloak_database.metadata.annotations | default({})).get(
+        'cnpg.io/hibernation', '') in ['', 'off'] or
+        (cluster_lifecycle_live.keycloak_database_reconciliation.metadata.annotations | default({})).get(
+        'homelab.local/power-phase', '') == 'preparing'
+
+- name: Protect the three Keycloak Flux leaves from parent reconciliation
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: '{{ cluster_lifecycle_live[item].metadata.name }}'
+        namespace: flux-system
+        uid: '{{ cluster_power_site.lifecycle.object_uids[item] }}'
+        annotations:
+          kustomize.toolkit.fluxcd.io/reconcile: disabled
+          homelab.local/power-phase: preparing
+      spec:
+        suspend: true
+  loop: [keycloak_reconciliation, keycloak_database_reconciliation, keycloak_config_reconciliation]
+  no_log: true
+
+- name: Ensure the root has observed the protected Keycloak leaves
+  ansible.builtin.include_tasks: cluster-power-root-sync.yaml
+
+- name: Wait for Keycloak Flux reconciliations to finish before changing workloads
+  kubernetes.core.k8s_info:
+    api_version: kustomize.toolkit.fluxcd.io/v1
+    kind: Kustomization
+    name: '{{ cluster_lifecycle_live[item].metadata.name }}'
+    namespace: flux-system
+  loop: [keycloak_reconciliation, keycloak_database_reconciliation, keycloak_config_reconciliation]
+  register: cluster_lifecycle_keycloak_paused
+  until: >-
+    cluster_lifecycle_keycloak_paused.resources | length == 1 and
+    cluster_lifecycle_keycloak_paused.resources[0].spec.suspend | default(false) | bool and
+    (cluster_lifecycle_keycloak_paused.resources[0].status.conditions | default([]) |
+    selectattr('type', 'equalto', 'Reconciling') | selectattr('status', 'equalto', 'True') | list | length) == 0
+  retries: 120
+  delay: 5
+  no_log: true
+
+- name: Suspend periodic Keycloak configuration before stopping the server
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: batch/v1
+      kind: CronJob
+      metadata:
+        name: keycloak-config
+        namespace: keycloak
+        uid: '{{ cluster_power_site.lifecycle.object_uids.keycloak_config }}'
+      spec:
+        suspend: true
+  no_log: true
+
+- name: Let any already running configuration job complete while Keycloak is still online
+  kubernetes.core.k8s_info:
+    api_version: batch/v1
+    kind: CronJob
+    name: keycloak-config
+    namespace: keycloak
+  register: cluster_lifecycle_keycloak_jobs
+  until: cluster_lifecycle_keycloak_jobs.resources[0].status.active | default([]) | length == 0
+  retries: 120
+  delay: 5
+  no_log: true
+
+- name: Ask the official Keycloak operator to stop the existing server
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: k8s.keycloak.org/v2beta1
+      kind: Keycloak
+      metadata:
+        name: keycloak
+        namespace: keycloak
+        uid: '{{ cluster_power_site.lifecycle.object_uids.keycloak }}'
+      spec:
+        instances: 0
+  no_log: true
+
+- name: Wait for the Keycloak writer to terminate
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    name: keycloak-0
+    namespace: keycloak
+  register: cluster_lifecycle_keycloak_writer
+  until: cluster_lifecycle_keycloak_writer.resources | length == 0
+  retries: 120
+  delay: 5
+  no_log: true
+
+- name: Request native CNPG hibernation for the retained Keycloak database
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: postgresql.cnpg.io/v1
+      kind: Cluster
+      metadata:
+        name: keycloak-db
+        namespace: keycloak
+        uid: '{{ cluster_power_site.lifecycle.object_uids.keycloak_database }}'
+        annotations:
+          cnpg.io/hibernation: 'on'
+  no_log: true
+
+- name: Wait for clean Keycloak database hibernation
+  kubernetes.core.k8s_info:
+    api_version: postgresql.cnpg.io/v1
+    kind: Cluster
+    name: keycloak-db
+    namespace: keycloak
+  register: cluster_lifecycle_keycloak_hibernated
+  until: >-
+    (cluster_lifecycle_keycloak_hibernated.resources[0].status.conditions | default([]) |
+    selectattr('type', 'equalto', 'cnpg.io/hibernation') | map(attribute='status') | list) == ['True']
+  retries: 420
+  delay: 5
+  no_log: true
+
+- name: Wait until every Keycloak PostgreSQL pod has terminated
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: keycloak
+    label_selectors: [cnpg.io/cluster=keycloak-db]
+  register: cluster_lifecycle_keycloak_database_pods
+  until: cluster_lifecycle_keycloak_database_pods.resources | length == 0
+  retries: 420
+  delay: 5
+  no_log: true
